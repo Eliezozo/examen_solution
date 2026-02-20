@@ -55,10 +55,20 @@ export async function fedapayRequest<T>(path: string, init?: RequestInit): Promi
   });
 
   const text = await response.text();
-  const payload = text ? JSON.parse(text) : {};
+  let payload: Record<string, unknown> = {};
+  if (text) {
+    try {
+      payload = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      payload = { raw: text };
+    }
+  }
 
   if (!response.ok) {
-    const message = payload?.message || payload?.error || `FedaPay API error ${response.status}`;
+    const message =
+      (payload?.message as string) ||
+      (payload?.error as string) ||
+      `FedaPay API error ${response.status}`;
     throw new Error(message);
   }
 

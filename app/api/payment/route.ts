@@ -16,6 +16,14 @@ type PaymentRequest = {
 };
 
 type FedaPayTransactionCreateResponse = {
+  data?: {
+    id?: number;
+    reference?: string;
+  };
+  transaction?: {
+    id?: number;
+    reference?: string;
+  };
   v1?: {
     id?: number;
     reference?: string;
@@ -25,6 +33,11 @@ type FedaPayTransactionCreateResponse = {
 };
 
 type FedaPayTokenCreateResponse = {
+  data?: {
+    url?: string;
+    token?: string;
+  };
+  payment_url?: string;
   url?: string;
   token?: string;
   v1?: {
@@ -32,6 +45,36 @@ type FedaPayTokenCreateResponse = {
     token?: string;
   };
 };
+
+function pickTransactionId(payload: FedaPayTransactionCreateResponse) {
+  return (
+    payload?.v1?.id ??
+    payload?.id ??
+    payload?.data?.id ??
+    payload?.transaction?.id ??
+    null
+  );
+}
+
+function pickTransactionReference(payload: FedaPayTransactionCreateResponse) {
+  return (
+    payload?.v1?.reference ??
+    payload?.reference ??
+    payload?.data?.reference ??
+    payload?.transaction?.reference ??
+    null
+  );
+}
+
+function pickPaymentUrl(payload: FedaPayTokenCreateResponse) {
+  return (
+    payload?.url ??
+    payload?.v1?.url ??
+    payload?.payment_url ??
+    payload?.data?.url ??
+    null
+  );
+}
 
 const TOGO_PHONE_REGEX = /^\+228 [0-9]{8}$/;
 
@@ -124,12 +167,16 @@ export async function POST(req: Request) {
       body: JSON.stringify(transactionBody),
     });
 
-    const fedapayTransactionId = transactionResponse?.v1?.id ?? transactionResponse?.id;
-    const fedapayReference = transactionResponse?.v1?.reference ?? transactionResponse?.reference ?? null;
+    const fedapayTransactionId = pickTransactionId(transactionResponse);
+    const fedapayReference = pickTransactionReference(transactionResponse);
 
     if (!fedapayTransactionId) {
       return NextResponse.json(
-        { error: "Impossible de créer la transaction FedaPay." },
+        {
+          error:
+            "Impossible de créer la transaction FedaPay (réponse invalide). Vérifie FEDAPAY_SECRET_KEY, FEDAPAY_ENV et les endpoints FedaPay.",
+          fedapayResponse: transactionResponse,
+        },
         { status: 500 }
       );
     }
@@ -142,11 +189,14 @@ export async function POST(req: Request) {
       }
     );
 
-    const paymentUrl = tokenResponse?.url ?? tokenResponse?.v1?.url;
+    const paymentUrl = pickPaymentUrl(tokenResponse);
 
     if (!paymentUrl) {
       return NextResponse.json(
-        { error: "Impossible de générer l'URL de paiement FedaPay." },
+        {
+          error: "Impossible de générer l'URL de paiement FedaPay (token invalide).",
+          fedapayTokenResponse: tokenResponse,
+        },
         { status: 500 }
       );
     }
