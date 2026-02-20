@@ -16,20 +16,36 @@ type PaymentRequest = {
 };
 
 type FedaPayTransactionCreateResponse = {
+  "v1/transaction"?: {
+    id?: number;
+    reference?: string;
+    payment_url?: string;
+    payment_token?: string;
+  };
   data?: {
     id?: number;
     reference?: string;
+    payment_url?: string;
+    payment_token?: string;
   };
   transaction?: {
     id?: number;
     reference?: string;
+    payment_url?: string;
+    payment_token?: string;
   };
   v1?: {
     id?: number;
     reference?: string;
+    url?: string;
+    token?: string;
+    payment_url?: string;
+    payment_token?: string;
   };
   id?: number;
   reference?: string;
+  payment_url?: string;
+  payment_token?: string;
 };
 
 type FedaPayTokenCreateResponse = {
@@ -46,24 +62,80 @@ type FedaPayTokenCreateResponse = {
   };
 };
 
+type AnyRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): AnyRecord | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as AnyRecord;
+}
+
+function coerceTransactionId(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function coerceString(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value;
+  return null;
+}
+
+function deepFindTransactionCandidate(
+  input: unknown,
+  depth = 0
+): { id: number | null; reference: string | null; paymentUrl: string | null } | null {
+  if (depth > 5) return null;
+  const obj = asRecord(input);
+  if (!obj) return null;
+
+  const id = coerceTransactionId(obj.id);
+  const reference = coerceString(obj.reference);
+  const paymentUrl = coerceString(obj.payment_url) ?? coerceString(obj.url);
+
+  if (id !== null || reference || paymentUrl) {
+    return { id, reference: reference ?? null, paymentUrl: paymentUrl ?? null };
+  }
+
+  for (const value of Object.values(obj)) {
+    const nested = deepFindTransactionCandidate(value, depth + 1);
+    if (nested && (nested.id !== null || nested.reference || nested.paymentUrl)) {
+      return nested;
+    }
+  }
+
+  return null;
+}
+
 function pickTransactionId(payload: FedaPayTransactionCreateResponse) {
-  return (
+  const primary =
+    payload?.["v1/transaction"]?.id ??
     payload?.v1?.id ??
     payload?.id ??
     payload?.data?.id ??
     payload?.transaction?.id ??
-    null
-  );
+    null;
+  const coercedPrimary = coerceTransactionId(primary);
+  if (coercedPrimary !== null) return coercedPrimary;
+
+  const deep = deepFindTransactionCandidate(payload);
+  return deep?.id ?? null;
 }
 
 function pickTransactionReference(payload: FedaPayTransactionCreateResponse) {
-  return (
+  const primary =
+    payload?.["v1/transaction"]?.reference ??
     payload?.v1?.reference ??
     payload?.reference ??
     payload?.data?.reference ??
     payload?.transaction?.reference ??
-    null
-  );
+    null;
+  if (primary) return primary;
+
+  const deep = deepFindTransactionCandidate(payload);
+  return deep?.reference ?? null;
 }
 
 function pickPaymentUrl(payload: FedaPayTokenCreateResponse) {
@@ -74,6 +146,22 @@ function pickPaymentUrl(payload: FedaPayTokenCreateResponse) {
     payload?.data?.url ??
     null
   );
+}
+
+function pickPaymentUrlFromTransaction(payload: FedaPayTransactionCreateResponse) {
+  const primary = (
+    payload?.["v1/transaction"]?.payment_url ??
+    payload?.payment_url ??
+    payload?.v1?.payment_url ??
+    payload?.v1?.url ??
+    payload?.data?.payment_url ??
+    payload?.transaction?.payment_url ??
+    null
+  );
+  if (primary) return primary;
+
+  const deep = deepFindTransactionCandidate(payload);
+  return deep?.paymentUrl ?? null;
 }
 
 const TOGO_PHONE_REGEX = /^\+228 [0-9]{8}$/;
@@ -174,28 +262,36 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error:
-            "Impossible de créer la transaction FedaPay (réponse invalide). Vérifie FEDAPAY_SECRET_KEY, FEDAPAY_ENV et les endpoints FedaPay.",
+            "Impossible de récupérer l'identifiant de transaction FedaPay depuis la réponse API.",
+          diagnostics: {
+            env: process.env.FEDAPAY_ENV === "live" ? "live" : "sandbox",
+            hasSecretKey: Boolean(process.env.FEDAPAY_SECRET_KEY),
+          },
           fedapayResponse: transactionResponse,
         },
         { status: 500 }
       );
     }
 
-    const tokenResponse = await fedapayRequest<FedaPayTokenCreateResponse>(
-      `/transactions/${fedapayTransactionId}/token`,
-      {
-        method: "POST",
-        body: JSON.stringify({}),
-      }
-    );
-
-    const paymentUrl = pickPaymentUrl(tokenResponse);
+    let tokenResponse: FedaPayTokenCreateResponse | null = null;
+    let paymentUrl = pickPaymentUrlFromTransaction(transactionResponse);
+    if (!paymentUrl) {
+      tokenResponse = await fedapayRequest<FedaPayTokenCreateResponse>(
+        `/transactions/${fedapayTransactionId}/token`,
+        {
+          method: "POST",
+          body: JSON.stringify({}),
+        }
+      );
+      paymentUrl = pickPaymentUrl(tokenResponse);
+    }
 
     if (!paymentUrl) {
       return NextResponse.json(
         {
           error: "Impossible de générer l'URL de paiement FedaPay (token invalide).",
-          fedapayTokenResponse: tokenResponse,
+          fedapayTokenResponse: tokenResponse ?? null,
+          fedapayTransactionResponse: transactionResponse,
         },
         { status: 500 }
       );
