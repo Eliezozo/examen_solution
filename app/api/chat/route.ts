@@ -70,7 +70,7 @@ export async function POST(req: Request) {
 
     const { data: existingProfile } = await supabase
       .from("profiles")
-      .select("id, full_name, phone, classe, is_premium, premium_until")
+      .select("id, full_name, phone, classe, preferred_tutor_gender, is_premium, premium_until")
       .eq("id", userId)
       .maybeSingle();
 
@@ -84,10 +84,11 @@ export async function POST(req: Request) {
           phone: phone ?? null,
           classe: classe ?? null,
           full_name: null,
+          preferred_tutor_gender: "female",
           is_premium: false,
           premium_until: null,
         })
-        .select("id, full_name, phone, classe, is_premium, premium_until")
+        .select("id, full_name, phone, classe, preferred_tutor_gender, is_premium, premium_until")
         .single();
 
       if (insertProfileError) {
@@ -105,7 +106,7 @@ export async function POST(req: Request) {
           .from("profiles")
           .update({ phone: nextPhone, classe: nextClasse })
           .eq("id", userId)
-          .select("id, full_name, phone, classe, is_premium, premium_until")
+          .select("id, full_name, phone, classe, preferred_tutor_gender, is_premium, premium_until")
           .single();
         if (updatedProfile) {
           profile = updatedProfile;
@@ -144,13 +145,36 @@ export async function POST(req: Request) {
       );
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    const brevityByClasse =
+      classe === "CM2" || classe === "3ème"
+        ? `
+Règle de concision renforcée pour ${classe}:
+- Réponse très directe et précise.
+- Maximum 70 mots.
+- Utiliser des phrases très courtes.
+- Garder APC en 3 mini-sections.
+- Éviter les détails théoriques inutiles.
+`
+        : `
+Règle de concision pour 1ère:
+- Maximum 120 mots.
+- APC clair et synthétique.
+`;
+
+    const tutorPersona =
+      profile?.preferred_tutor_gender === "male"
+        ? "Tu incarnes un Prof."
+        : "Tu incarnes une Professeure.";
 
     const userContext = `
 Classe: ${classe || "Non précisée"}
 Domaine: ${domaine || "Non précisé"}
 Matière: ${matiere || "Non précisée"}
 Question: ${message || "Voir image envoyée"}
+${tutorPersona}
+${brevityByClasse}
 `;
 
     const parts: Array<{ text: string } | { inlineData: { data: string; mimeType: string } }> = [

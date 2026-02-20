@@ -6,9 +6,13 @@ type ProfilePayload = {
   fullName?: string;
   phone?: string;
   classe?: string;
+  themeColor?: "green" | "blue" | "orange" | "red" | "black";
+  tutorGender?: "female" | "male";
 };
 
 const TOGO_PHONE_REGEX = /^\+228 [0-9]{8}$/;
+const ALLOWED_THEME_COLORS = new Set(["green", "blue", "orange", "red", "black"]);
+const ALLOWED_TUTOR_GENDERS = new Set(["female", "male"]);
 
 function getSupabase() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -40,7 +44,9 @@ export async function GET(req: Request) {
 
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, full_name, phone, classe, is_premium, premium_until")
+      .select(
+        "id, full_name, phone, classe, theme_color, preferred_tutor_gender, referral_balance, total_referral_earnings, is_premium, premium_until"
+      )
       .eq("id", userId)
       .maybeSingle();
 
@@ -65,7 +71,7 @@ export async function PATCH(req: Request) {
       );
     }
 
-    const { userId, fullName, phone, classe }: ProfilePayload = await req.json();
+    const { userId, fullName, phone, classe, themeColor, tutorGender }: ProfilePayload = await req.json();
 
     if (!userId) {
       return NextResponse.json({ error: "userId requis." }, { status: 400 });
@@ -77,8 +83,26 @@ export async function PATCH(req: Request) {
         { status: 400 }
       );
     }
+    if (themeColor && !ALLOWED_THEME_COLORS.has(themeColor)) {
+      return NextResponse.json(
+        { error: "Couleur invalide." },
+        { status: 400 }
+      );
+    }
+    if (tutorGender && !ALLOWED_TUTOR_GENDERS.has(tutorGender)) {
+      return NextResponse.json(
+        { error: "Préférence tuteur invalide." },
+        { status: 400 }
+      );
+    }
 
-    const updatePayload: { full_name?: string | null; phone?: string | null; classe?: string | null } = {};
+    const updatePayload: {
+      full_name?: string | null;
+      phone?: string | null;
+      classe?: string | null;
+      theme_color?: "green" | "blue" | "orange" | "red" | "black";
+      preferred_tutor_gender?: "female" | "male";
+    } = {};
 
     if (typeof fullName === "string") {
       updatePayload.full_name = fullName.trim() || null;
@@ -88,6 +112,12 @@ export async function PATCH(req: Request) {
     }
     if (typeof classe === "string") {
       updatePayload.classe = classe.trim() || null;
+    }
+    if (themeColor) {
+      updatePayload.theme_color = themeColor;
+    }
+    if (tutorGender) {
+      updatePayload.preferred_tutor_gender = tutorGender;
     }
 
     const { data, error } = await supabase
@@ -99,7 +129,9 @@ export async function PATCH(req: Request) {
         },
         { onConflict: "id" }
       )
-      .select("id, full_name, phone, classe, is_premium, premium_until")
+      .select(
+        "id, full_name, phone, classe, theme_color, preferred_tutor_gender, referral_balance, total_referral_earnings, is_premium, premium_until"
+      )
       .single();
 
     if (error) {
