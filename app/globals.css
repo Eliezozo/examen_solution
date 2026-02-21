@@ -14,3 +14,17 @@ body {
   margin: 0;
   font-family: "Poppins", "Segoe UI", sans-serif;
 }
+
+@keyframes sidebar-arrow-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(-4px);
+  }
+}
+
+.mobile-sidebar-arrow {
+  animation: sidebar-arrow-nudge 1.2s ease-in-out infinite;
+}

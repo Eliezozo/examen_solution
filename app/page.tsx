@@ -664,6 +664,15 @@ export default function ChatPage() {
         </div>
       </aside>
 
+      {showSidebar && (
+        <button
+          type="button"
+          aria-label="Fermer le menu"
+          onClick={() => setShowSidebar(false)}
+          className="fixed inset-0 z-30 bg-black/35 md:hidden"
+        />
+      )}
+
       <div
         className={`flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border shadow-sm ${
           isDarkTheme ? "border-slate-700 bg-slate-900" : "bg-white"
@@ -675,8 +684,14 @@ export default function ChatPage() {
           }`}
         >
           <div className="flex items-center gap-2">
-            <button onClick={() => setShowSidebar(true)} className="rounded-lg border px-2 py-1 text-xs md:hidden">
-              Menu
+            <button
+              onClick={() => setShowSidebar(true)}
+              aria-label="Ouvrir le menu latéral"
+              className={`mobile-sidebar-arrow rounded-lg border px-2 py-1 text-sm md:hidden ${
+                isDarkTheme ? "border-slate-600 bg-slate-900 text-slate-100" : "bg-white text-slate-700"
+              }`}
+            >
+              ←
             </button>
             <p className="text-sm font-semibold" style={{ color: "var(--accent)" }}>
               {fullName ? `Bienvenue ${fullName}` : "Bienvenue élève"}
@@ -761,7 +776,7 @@ export default function ChatPage() {
               onKeyDown={onComposerKeyDown}
               onPaste={onComposerPaste}
               rows={2}
-              placeholder="Pose ta question... (Entrée envoyer, Shift+Entrée ligne, Ctrl/Cmd+V pour coller une image)"
+              placeholder="Pose ta question ici."
               className={`min-h-[44px] flex-1 resize-none rounded-xl border p-2 text-sm ${isDarkTheme ? "border-slate-600 bg-slate-900 text-slate-100" : ""}`}
             />
             <button
