@@ -6,6 +6,7 @@ type TutorGender = "female" | "male";
 
 type ManualPremiumPayload = {
   userId?: string;
+  phone?: string;
   adminKey?: string;
   plan?: PlanId;
   days?: number;
@@ -58,8 +59,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Accès refusé." }, { status: 401 });
     }
 
-    if (!payload.userId) {
-      return NextResponse.json({ error: "userId requis." }, { status: 400 });
+    if (!payload.userId && !payload.phone) {
+      return NextResponse.json({ error: "userId ou phone requis." }, { status: 400 });
     }
 
     const plan: PlanId = payload.plan === "pass_yearly" ? "pass_yearly" : "pass_monthly";
@@ -79,24 +80,116 @@ export async function POST(req: Request) {
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("id, full_name, phone, classe, preferred_tutor_gender, premium_until")
-      .eq("id", payload.userId)
-      .maybeSingle<{
+    const selectFields =
+      "id, full_name, phone, classe, preferred_tutor_gender, premium_until, created_at";
+
+    const byUserId = payload.userId?.trim() ?? "";
+    const byPhone = payload.phone?.trim() ?? "";
+    const TOGO_PHONE_REGEX = /^\+228 [0-9]{8}$/;
+    if (byPhone && !TOGO_PHONE_REGEX.test(byPhone)) {
+      return NextResponse.json(
+        { error: "Numéro invalide. Format requis: +228 XXXXXXXX" },
+        { status: 400 }
+      );
+    }
+
+    let profile:
+      | {
         id: string;
         full_name: string | null;
         phone: string | null;
         classe: string | null;
         preferred_tutor_gender: TutorGender | null;
         premium_until: string | null;
-      }>();
+        created_at?: string | null;
+      }
+      | null = null;
 
-    if (profileError) {
-      return NextResponse.json({ error: profileError.message }, { status: 500 });
+    if (byUserId) {
+      const { data: profileById, error: profileByIdError } = await supabase
+        .from("profiles")
+        .select(selectFields)
+        .eq("id", byUserId)
+        .maybeSingle<{
+          id: string;
+          full_name: string | null;
+          phone: string | null;
+          classe: string | null;
+          preferred_tutor_gender: TutorGender | null;
+          premium_until: string | null;
+          created_at?: string | null;
+        }>();
+
+      if (profileByIdError) {
+        return NextResponse.json({ error: profileByIdError.message }, { status: 500 });
+      }
+      profile = profileById ?? null;
     }
+
+    if (!profile && byPhone) {
+      const { data: profileByPhone, error: profileByPhoneError } = await supabase
+        .from("profiles")
+        .select(selectFields)
+        .eq("phone", byPhone)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (profileByPhoneError) {
+        return NextResponse.json({ error: profileByPhoneError.message }, { status: 500 });
+      }
+
+      const row = Array.isArray(profileByPhone) ? profileByPhone[0] : null;
+      profile = row
+        ? {
+            id: String(row.id),
+            full_name: (row.full_name as string | null) ?? null,
+            phone: (row.phone as string | null) ?? null,
+            classe: (row.classe as string | null) ?? null,
+            preferred_tutor_gender:
+              ((row.preferred_tutor_gender as TutorGender | null) ?? null),
+            premium_until: (row.premium_until as string | null) ?? null,
+            created_at: (row.created_at as string | null) ?? null,
+          }
+        : null;
+    }
+
+    if (!profile && byUserId) {
+      const { error: createProfileError } = await supabase.from("profiles").upsert(
+        {
+          id: byUserId,
+          phone: byPhone || null,
+        },
+        { onConflict: "id" }
+      );
+      if (createProfileError) {
+        return NextResponse.json({ error: createProfileError.message }, { status: 500 });
+      }
+
+      const { data: createdProfile, error: createdProfileError } = await supabase
+        .from("profiles")
+        .select(selectFields)
+        .eq("id", byUserId)
+        .maybeSingle<{
+          id: string;
+          full_name: string | null;
+          phone: string | null;
+          classe: string | null;
+          preferred_tutor_gender: TutorGender | null;
+          premium_until: string | null;
+          created_at?: string | null;
+        }>();
+
+      if (createdProfileError) {
+        return NextResponse.json({ error: createdProfileError.message }, { status: 500 });
+      }
+      profile = createdProfile ?? null;
+    }
+
     if (!profile) {
-      return NextResponse.json({ error: "Profil introuvable pour ce userId." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Profil introuvable. Envoie userId valide ou phone existant." },
+        { status: 404 }
+      );
     }
 
     const now = new Date();
@@ -112,7 +205,7 @@ export async function POST(req: Request) {
         is_premium: true,
         premium_until: premiumUntilIso,
       })
-      .eq("id", payload.userId);
+      .eq("id", profile.id);
 
     if (premiumUpdateError) {
       return NextResponse.json({ error: premiumUpdateError.message }, { status: 500 });
@@ -122,14 +215,14 @@ export async function POST(req: Request) {
     let fedapayTransactionId = buildManualFedapayTransactionId();
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const { error } = await supabase.from("payment_transactions").insert({
-        user_id: payload.userId,
+        user_id: profile.id,
         fedapay_transaction_id: fedapayTransactionId,
         fedapay_reference: `manual_${Date.now()}`,
         status: "approved",
         plan_id: plan,
         plan_amount: manualAmount,
         full_name: profile.full_name ?? "Activation manuelle",
-        phone: profile.phone ?? "N/A",
+        phone: profile.phone ?? byPhone ?? "N/A",
         classe: profile.classe ?? null,
         tutor_gender: profile.preferred_tutor_gender ?? "female",
         recommender_phone: null,
@@ -156,7 +249,7 @@ export async function POST(req: Request) {
     }
 
     await supabase.from("notifications").insert({
-      user_id: payload.userId,
+      user_id: profile.id,
       title: "Premium activé manuellement",
       message: `Ton premium est actif jusqu'au ${new Date(premiumUntilIso).toLocaleDateString("fr-FR")}.`,
       metadata: {
@@ -168,7 +261,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
-      userId: payload.userId,
+      userId: profile.id,
       plan,
       amount: manualAmount,
       daysAdded: manualDays,

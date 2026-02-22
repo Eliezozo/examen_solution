@@ -246,3 +246,130 @@ create policy "payment_transactions_update_all"
 on public.payment_transactions for update
 using (true)
 with check (true);
+
+drop function if exists public.activate_manual_premium(uuid, integer, integer, text);
+
+create function public.activate_manual_premium(
+  p_user_id uuid,
+  p_days integer default 30,
+  p_amount integer default 500,
+  p_note text default null
+)
+returns table (
+  user_id uuid,
+  premium_until timestamptz,
+  payment_transaction_id uuid
+)
+language plpgsql
+as $$
+declare
+  v_profile record;
+  v_now timestamptz := now();
+  v_base_date timestamptz;
+  v_new_premium_until timestamptz;
+  v_tx_id uuid;
+  v_plan_id text;
+  v_fedapay_tx_id bigint;
+begin
+  if p_user_id is null then
+    raise exception 'user_id requis';
+  end if;
+
+  if p_days is null or p_days <= 0 then
+    raise exception 'days doit etre > 0';
+  end if;
+
+  if p_amount is null or p_amount < 0 then
+    raise exception 'amount doit etre >= 0';
+  end if;
+
+  select
+    p.id,
+    p.full_name,
+    p.phone,
+    p.classe,
+    p.preferred_tutor_gender,
+    p.premium_until
+  into v_profile
+  from public.profiles p
+  where p.id = p_user_id
+  for update;
+
+  if not found then
+    raise exception 'Profil introuvable pour user_id=%', p_user_id;
+  end if;
+
+  v_base_date := greatest(coalesce(v_profile.premium_until, v_now), v_now);
+  v_new_premium_until := v_base_date + make_interval(days => p_days);
+  v_plan_id := case when p_days >= 365 then 'pass_yearly' else 'pass_monthly' end;
+
+  update public.profiles
+  set
+    is_premium = true,
+    premium_until = v_new_premium_until
+  where id = p_user_id;
+
+  -- Identifiant négatif pour distinguer les activations manuelles des transactions FedaPay.
+  v_fedapay_tx_id := -((extract(epoch from clock_timestamp()) * 1000)::bigint + floor(random() * 1000)::bigint);
+
+  insert into public.payment_transactions (
+    user_id,
+    fedapay_transaction_id,
+    fedapay_reference,
+    status,
+    plan_id,
+    plan_amount,
+    full_name,
+    phone,
+    classe,
+    tutor_gender,
+    recommender_phone,
+    premium_until,
+    approved_at,
+    raw_payload
+  )
+  values (
+    p_user_id,
+    v_fedapay_tx_id,
+    'manual_sql_' || extract(epoch from clock_timestamp())::bigint,
+    'approved',
+    v_plan_id,
+    p_amount,
+    coalesce(v_profile.full_name, 'Activation manuelle'),
+    coalesce(v_profile.phone, 'N/A'),
+    v_profile.classe,
+    coalesce(v_profile.preferred_tutor_gender, 'female'),
+    null,
+    v_new_premium_until,
+    now(),
+    jsonb_build_object(
+      'source', 'manual-sql-function',
+      'note', p_note,
+      'granted_days', p_days
+    )
+  )
+  returning id into v_tx_id;
+
+  insert into public.notifications (
+    user_id,
+    title,
+    message,
+    metadata
+  )
+  values (
+    p_user_id,
+    'Premium activé manuellement',
+    'Ton premium est actif jusqu''au ' || to_char(v_new_premium_until at time zone 'UTC', 'DD/MM/YYYY') || '.',
+    jsonb_build_object(
+      'source', 'manual-sql-function',
+      'days', p_days,
+      'amount', p_amount,
+      'payment_transaction_id', v_tx_id,
+      'note', p_note
+    )
+  );
+
+  return query
+  select p_user_id, v_new_premium_until, v_tx_id;
+end;
+$$;
