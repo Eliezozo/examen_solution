@@ -149,6 +149,35 @@ export async function POST(req: Request) {
       }
     }
 
+    // Cas d'activation manuelle anticipée: premium attaché au téléphone avant 1ère session.
+    if (!premiumActive && phone) {
+      const { data: phonePremiumProfile, error: phonePremiumProfileError } = await supabase
+        .from("profiles")
+        .select("id, premium_until")
+        .eq("phone", phone)
+        .neq("id", userId)
+        .eq("is_premium", true)
+        .not("premium_until", "is", null)
+        .gt("premium_until", nowIso)
+        .order("premium_until", { ascending: false })
+        .limit(1)
+        .maybeSingle<{ id: string; premium_until: string | null }>();
+
+      if (phonePremiumProfileError) {
+        return NextResponse.json({ error: phonePremiumProfileError.message }, { status: 500 });
+      }
+
+      if (phonePremiumProfile?.premium_until) {
+        resolvedPremiumUntil = phonePremiumProfile.premium_until;
+        premiumActive = true;
+
+        await supabase
+          .from("profiles")
+          .update({ is_premium: true, premium_until: resolvedPremiumUntil })
+          .eq("id", userId);
+      }
+    }
+
     const { count: usedCount, error: countError } = await supabase
       .from("history")
       .select("id", { count: "exact", head: true })

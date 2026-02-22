@@ -125,6 +125,7 @@ export default function ChatPage() {
   const [premiumUntil, setPremiumUntil] = useState<string | null>(null);
 
   const [showPayModal, setShowPayModal] = useState(false);
+  const [showPremiumPopup, setShowPremiumPopup] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<PlanId>("pass_monthly");
   const [recommenderPhone, setRecommenderPhone] = useState("");
   const [paymentLoading, setPaymentLoading] = useState(false);
@@ -134,6 +135,7 @@ export default function ChatPage() {
   const [isNearBottom, setIsNearBottom] = useState(true);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const premiumPopupShownRef = useRef(false);
 
   const theme = useMemo(
     () => THEME_OPTIONS.find((item) => item.id === themeColor) ?? THEME_OPTIONS[0],
@@ -201,6 +203,14 @@ export default function ChatPage() {
     if (!isNearBottom && !loading) return;
     chatEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [chat, loading, isNearBottom]);
+
+  useEffect(() => {
+    if (!premiumActive || premiumPopupShownRef.current) return;
+    premiumPopupShownRef.current = true;
+    setShowPremiumPopup(true);
+    const timer = window.setTimeout(() => setShowPremiumPopup(false), 5000);
+    return () => window.clearTimeout(timer);
+  }, [premiumActive]);
 
   async function loadProfile(id: string) {
     const res = await fetch(`/api/profile?userId=${encodeURIComponent(id)}`);
@@ -520,7 +530,7 @@ export default function ChatPage() {
         ["--accent" as string]: theme.accent,
         ["--accent-soft" as string]: theme.soft,
       }}
-      className={`flex h-[calc(100vh-9rem)] gap-2 ${isDarkTheme ? "text-slate-100" : ""}`}
+      className={`flex h-[calc(100vh-9rem)] gap-2 ${isDarkTheme ? "text-white" : ""}`}
     >
       <aside
         className={`fixed inset-y-0 left-0 z-40 w-72 transform overflow-y-auto border-r p-2.5 shadow-lg transition-transform md:static md:z-0 md:block md:w-72 md:translate-x-0 md:rounded-2xl md:border md:shadow-sm ${
@@ -544,25 +554,25 @@ export default function ChatPage() {
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             placeholder="Nom complet"
-            className={`w-full rounded-lg border p-2 text-sm ${isDarkTheme ? "border-slate-600 bg-slate-900 text-slate-100" : ""}`}
+            className={`w-full rounded-lg border p-2 text-sm ${isDarkTheme ? "border-slate-600 bg-slate-900 text-white" : ""}`}
           />
           <input
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="+228 XXXXXXXX"
-            className={`w-full rounded-lg border p-2 text-sm ${isDarkTheme ? "border-slate-600 bg-slate-900 text-slate-100" : ""}`}
+            className={`w-full rounded-lg border p-2 text-sm ${isDarkTheme ? "border-slate-600 bg-slate-900 text-white" : ""}`}
           />
-          <select value={classe} onChange={(e) => setClasse(e.target.value)} className={`w-full rounded-lg border p-2 text-sm ${isDarkTheme ? "border-slate-600 bg-slate-900 text-slate-100" : ""}`}>
+          <select value={classe} onChange={(e) => setClasse(e.target.value)} className={`w-full rounded-lg border p-2 text-sm ${isDarkTheme ? "border-slate-600 bg-slate-900 text-white" : ""}`}>
             {CLASSES.map((c) => (
               <option key={c}>{c}</option>
             ))}
           </select>
-          <select value={domaine} onChange={(e) => setDomaine(e.target.value)} className={`w-full rounded-lg border p-2 text-sm ${isDarkTheme ? "border-slate-600 bg-slate-900 text-slate-100" : ""}`}>
+          <select value={domaine} onChange={(e) => setDomaine(e.target.value)} className={`w-full rounded-lg border p-2 text-sm ${isDarkTheme ? "border-slate-600 bg-slate-900 text-white" : ""}`}>
             {domainesDisponibles.map((d) => (
               <option key={d.name}>{d.name}</option>
             ))}
           </select>
-          <select value={matiere} onChange={(e) => setMatiere(e.target.value)} className={`w-full rounded-lg border p-2 text-sm ${isDarkTheme ? "border-slate-600 bg-slate-900 text-slate-100" : ""}`}>
+          <select value={matiere} onChange={(e) => setMatiere(e.target.value)} className={`w-full rounded-lg border p-2 text-sm ${isDarkTheme ? "border-slate-600 bg-slate-900 text-white" : ""}`}>
             {matieres.map((m) => (
               <option key={m}>{m}</option>
             ))}
@@ -570,7 +580,7 @@ export default function ChatPage() {
           <select
             value={themeColor}
             onChange={(e) => setThemeColor(e.target.value as ThemeColor)}
-            className={`w-full rounded-lg border p-2 text-sm ${isDarkTheme ? "border-slate-600 bg-slate-900 text-slate-100" : ""}`}
+            className={`w-full rounded-lg border p-2 text-sm ${isDarkTheme ? "border-slate-600 bg-slate-900 text-white" : ""}`}
           >
             {THEME_OPTIONS.map((t) => (
               <option key={t.id} value={t.id}>
@@ -581,7 +591,7 @@ export default function ChatPage() {
           <select
             value={tutorGender}
             onChange={(e) => setTutorGender(e.target.value as TutorGender)}
-            className={`w-full rounded-lg border p-2 text-sm ${isDarkTheme ? "border-slate-600 bg-slate-900 text-slate-100" : ""}`}
+            className={`w-full rounded-lg border p-2 text-sm ${isDarkTheme ? "border-slate-600 bg-slate-900 text-white" : ""}`}
           >
             <option value="female">Je préfère une Professeure</option>
             <option value="male">Je préfère un Prof</option>
@@ -609,15 +619,15 @@ export default function ChatPage() {
             Notifications
           </p>
           <div className="mt-2 max-h-40 space-y-2 overflow-y-auto">
-            {rewardsLoading && <p className={`text-xs ${isDarkTheme ? "text-slate-300" : "text-slate-500"}`}>Chargement...</p>}
+            {rewardsLoading && <p className={`text-xs ${isDarkTheme ? "text-white" : "text-slate-500"}`}>Chargement...</p>}
             {!rewardsLoading && notifications.length === 0 && (
-              <p className={`text-xs ${isDarkTheme ? "text-slate-300" : "text-slate-500"}`}>Aucune notification.</p>
+              <p className={`text-xs ${isDarkTheme ? "text-white" : "text-slate-500"}`}>Aucune notification.</p>
             )}
             {notifications.map((item) => (
               <div key={item.id} className={`rounded-lg border p-2 text-xs ${isDarkTheme ? "border-slate-600 bg-slate-900" : ""}`}>
                 <p className="font-semibold">{item.title}</p>
-                <p className={`mt-1 ${isDarkTheme ? "text-slate-100" : "text-slate-700"}`}>{item.message}</p>
-                <p className={`mt-1 text-[11px] ${isDarkTheme ? "text-slate-300" : "text-slate-500"}`}>{formatDate(item.created_at)}</p>
+                <p className={`mt-1 ${isDarkTheme ? "text-white" : "text-slate-700"}`}>{item.message}</p>
+                <p className={`mt-1 text-[11px] ${isDarkTheme ? "text-white" : "text-slate-500"}`}>{formatDate(item.created_at)}</p>
               </div>
             ))}
           </div>
@@ -629,7 +639,7 @@ export default function ChatPage() {
           </p>
           <div className="mt-2 max-h-44 space-y-2 overflow-y-auto">
             {!rewardsLoading && commissions.length === 0 && (
-              <p className={`text-xs ${isDarkTheme ? "text-slate-300" : "text-slate-500"}`}>Aucune transaction.</p>
+              <p className={`text-xs ${isDarkTheme ? "text-white" : "text-slate-500"}`}>Aucune transaction.</p>
             )}
             {commissions.map((item) => (
               <div key={item.id} className={`rounded-lg border p-2 text-xs ${isDarkTheme ? "border-slate-600 bg-slate-900" : ""}`}>
@@ -637,7 +647,7 @@ export default function ChatPage() {
                 <p>Commission: {item.commission_amount}F</p>
                 <p>Statut: {item.payout_status}</p>
                 <p>Mobile Money: {item.payout_phone}</p>
-                <p className={`text-[11px] ${isDarkTheme ? "text-slate-300" : "text-slate-500"}`}>{formatDate(item.created_at)}</p>
+                <p className={`text-[11px] ${isDarkTheme ? "text-white" : "text-slate-500"}`}>{formatDate(item.created_at)}</p>
               </div>
             ))}
           </div>
@@ -648,8 +658,8 @@ export default function ChatPage() {
             Historique
           </p>
           <div className="mt-2 space-y-2">
-            {historyLoading && <p className={`text-xs ${isDarkTheme ? "text-slate-300" : "text-slate-500"}`}>Chargement...</p>}
-            {!historyLoading && history.length === 0 && <p className={`text-xs ${isDarkTheme ? "text-slate-300" : "text-slate-500"}`}>Aucun historique.</p>}
+            {historyLoading && <p className={`text-xs ${isDarkTheme ? "text-white" : "text-slate-500"}`}>Chargement...</p>}
+            {!historyLoading && history.length === 0 && <p className={`text-xs ${isDarkTheme ? "text-white" : "text-slate-500"}`}>Aucun historique.</p>}
             {history.map((item) => (
               <button
                 key={item.id}
@@ -657,7 +667,7 @@ export default function ChatPage() {
                 className={`w-full rounded-lg border p-2 text-left text-xs ${isDarkTheme ? "border-slate-600 bg-slate-900" : ""}`}
               >
                 <p className="line-clamp-2 font-medium">{item.message}</p>
-                <p className={`mt-1 text-[11px] ${isDarkTheme ? "text-slate-300" : "text-slate-500"}`}>{formatDate(item.created_at)}</p>
+                <p className={`mt-1 text-[11px] ${isDarkTheme ? "text-white" : "text-slate-500"}`}>{formatDate(item.created_at)}</p>
               </button>
             ))}
           </div>
@@ -688,7 +698,7 @@ export default function ChatPage() {
               onClick={() => setShowSidebar(true)}
               aria-label="Ouvrir le menu latéral"
               className={`mobile-sidebar-arrow rounded-lg border px-2 py-1 text-sm md:hidden ${
-                isDarkTheme ? "border-slate-600 bg-slate-900 text-slate-100" : "bg-white text-slate-700"
+                isDarkTheme ? "border-slate-600 bg-slate-900 text-white" : "bg-white text-slate-700"
               }`}
             >
               ←
@@ -715,13 +725,17 @@ export default function ChatPage() {
                   item.role === "user"
                     ? "text-white"
                     : isDarkTheme
-                    ? "border border-slate-600 bg-slate-800 text-slate-100"
+                    ? "border border-slate-600 bg-slate-800 text-white"
                     : "border border-slate-200 bg-slate-50"
                 }`}
                 style={item.role === "user" ? { backgroundColor: "var(--accent)" } : undefined}
               >
                 {item.role === "assistant" ? (
-                  <div className="prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-headings:my-2">
+                  <div
+                    className={`prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-headings:my-2 ${
+                      isDarkTheme ? "prose-invert text-white" : ""
+                    }`}
+                  >
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.text}</ReactMarkdown>
                   </div>
                 ) : (
@@ -777,7 +791,7 @@ export default function ChatPage() {
               onPaste={onComposerPaste}
               rows={2}
               placeholder="Pose ta question ici."
-              className={`min-h-[44px] flex-1 resize-none rounded-xl border p-2 text-sm ${isDarkTheme ? "border-slate-600 bg-slate-900 text-slate-100" : ""}`}
+              className={`min-h-[44px] flex-1 resize-none rounded-xl border p-2 text-sm ${isDarkTheme ? "border-slate-600 bg-slate-900 text-white" : ""}`}
             />
             <button
               onClick={onSend}
@@ -795,7 +809,7 @@ export default function ChatPage() {
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
           <div className={`w-full max-w-sm rounded-2xl p-4 shadow-xl ${isDarkTheme ? "border border-slate-700 bg-slate-900 text-white" : "bg-white"}`}>
             <h2 className={`text-base font-bold ${isDarkTheme ? "text-white" : "text-red-700"}`}>Abonnement requis</h2>
-            <p className={`mt-1 text-sm ${isDarkTheme ? "text-slate-200" : "text-slate-600"}`}>Choisis ton abonnement et règle le paiement.</p>
+            <p className={`mt-1 text-sm ${isDarkTheme ? "text-white" : "text-slate-600"}`}>Choisis ton abonnement et règle le paiement.</p>
 
             <div className="mt-3 space-y-2">
               {PASS_OPTIONS.map((pass) => (
@@ -813,7 +827,7 @@ export default function ChatPage() {
                   }`}
                 >
                   <p className="text-sm font-semibold">{pass.label} - {pass.price}F</p>
-                  <p className={`text-xs ${isDarkTheme ? "text-slate-200" : "text-slate-600"}`}>{pass.subtitle}</p>
+                  <p className={`text-xs ${isDarkTheme ? "text-white" : "text-slate-600"}`}>{pass.subtitle}</p>
                 </button>
               ))}
             </div>
@@ -887,6 +901,27 @@ export default function ChatPage() {
             >
               Fermer
             </button>
+          </div>
+        </div>
+      )}
+
+      {showPremiumPopup && (
+        <div className="fixed right-4 top-4 z-50 w-[min(92vw,22rem)]">
+          <div className={`rounded-2xl border p-3 shadow-xl ${isDarkTheme ? "border-slate-600 bg-slate-900 text-white" : "border-green-200 bg-white"}`}>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-bold text-green-600">Mode Premium activé</p>
+                <p className={`mt-1 text-xs ${isDarkTheme ? "text-white" : "text-slate-700"}`}>
+                  Accès illimité débloqué. {premiumUntil ? `Valide jusqu'au ${formatDate(premiumUntil)}.` : ""}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowPremiumPopup(false)}
+                className={`rounded-md px-2 py-1 text-xs ${isDarkTheme ? "bg-slate-700 text-white" : "bg-slate-100 text-slate-700"}`}
+              >
+                Fermer
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -248,6 +248,7 @@ using (true)
 with check (true);
 
 drop function if exists public.activate_manual_premium(uuid, integer, integer, text);
+drop function if exists public.activate_manual_premium_by_phone(text, integer, integer, text);
 
 create function public.activate_manual_premium(
   p_user_id uuid,
@@ -371,5 +372,73 @@ begin
 
   return query
   select p_user_id, v_new_premium_until, v_tx_id;
+end;
+$$;
+
+create function public.activate_manual_premium_by_phone(
+  p_phone text,
+  p_days integer default 30,
+  p_amount integer default 500,
+  p_note text default null
+)
+returns table (
+  user_id uuid,
+  phone text,
+  premium_until timestamptz,
+  payment_transaction_id uuid
+)
+language plpgsql
+as $$
+declare
+  v_user_id uuid;
+  v_result record;
+begin
+  if p_phone is null or btrim(p_phone) = '' then
+    raise exception 'phone requis';
+  end if;
+
+  if p_phone !~ '^\+228 [0-9]{8}$' then
+    raise exception 'Numéro invalide. Format requis: +228 XXXXXXXX';
+  end if;
+
+  select p.id
+  into v_user_id
+  from public.profiles p
+  where p.phone = btrim(p_phone)
+  order by p.created_at desc
+  limit 1;
+
+  if v_user_id is null then
+    insert into public.profiles (
+      id,
+      phone,
+      full_name,
+      classe,
+      preferred_tutor_gender,
+      is_premium,
+      premium_until
+    )
+    values (
+      gen_random_uuid(),
+      btrim(p_phone),
+      null,
+      null,
+      'female',
+      false,
+      null
+    )
+    returning id into v_user_id;
+  end if;
+
+  select *
+  into v_result
+  from public.activate_manual_premium(v_user_id, p_days, p_amount, p_note);
+
+  return query
+  select
+    v_result.user_id,
+    btrim(p_phone),
+    v_result.premium_until,
+    v_result.payment_transaction_id;
 end;
 $$;
