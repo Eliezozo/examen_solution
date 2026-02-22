@@ -79,7 +79,11 @@ function getOrCreateUserId() {
   const key = "rtogo_user_id";
   const existing = window.localStorage.getItem(key);
   if (existing) return existing;
-  const id = window.crypto.randomUUID();
+  const cryptoObj = window.crypto;
+  const id =
+    typeof cryptoObj?.randomUUID === "function"
+      ? cryptoObj.randomUUID()
+      : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`;
   window.localStorage.setItem(key, id);
   return id;
 }
@@ -531,7 +535,7 @@ export default function ChatPage() {
         ["--accent" as string]: theme.accent,
         ["--accent-soft" as string]: theme.soft,
       }}
-      className={`flex h-[calc(100dvh-9rem)] gap-2 md:h-[calc(100vh-9rem)] ${isDarkTheme ? "text-white" : ""}`}
+      className={`flex h-[calc(100vh-9rem)] supports-[height:100dvh]:h-[calc(100dvh-9rem)] gap-2 ${isDarkTheme ? "text-white" : ""}`}
     >
       <aside
         className={`fixed inset-y-0 left-0 z-40 w-72 transform overflow-y-auto border-r p-2.5 shadow-lg transition-transform md:static md:z-0 md:block md:w-72 md:translate-x-0 md:rounded-2xl md:border md:shadow-sm md:pointer-events-auto ${
