@@ -77,21 +77,39 @@ const THEME_OPTIONS: Array<{ id: ThemeColor; label: string; accent: string; soft
 
 function getOrCreateUserId() {
   const key = "rtogo_user_id";
-  const existing = window.localStorage.getItem(key);
-  if (existing) return existing;
+  try {
+    const existing = window.localStorage.getItem(key);
+    if (existing) return existing;
+  } catch {
+    // Ignore storage access errors (private mode / restricted browsers).
+  }
   const cryptoObj = window.crypto;
   const id =
     typeof cryptoObj?.randomUUID === "function"
       ? cryptoObj.randomUUID()
       : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`;
-  window.localStorage.setItem(key, id);
+  try {
+    window.localStorage.setItem(key, id);
+  } catch {
+    // Keep in-memory id only for this session if storage is unavailable.
+  }
   return id;
 }
 
 function formatDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+  try {
+    return date.toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+  } catch {
+    return date.toLocaleString("fr-FR", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
 }
 
 export default function ChatPage() {
