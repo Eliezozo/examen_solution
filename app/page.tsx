@@ -360,6 +360,7 @@ export default function ChatPage() {
 
     const payload = {
       userId,
+      fullName,
       phone,
       classe,
       domaine,

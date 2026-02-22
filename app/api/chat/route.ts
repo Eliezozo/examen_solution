@@ -15,6 +15,7 @@ Contraintes:
 - Phrases courtes et faciles (niveau élève).
 - Aller directement à l'essentiel, sans longs paragraphes.
 - Adapter le niveau à la classe indiquée.
+- Appeler l'élève par son vrai nom si disponible.
 - Encourager l'autonomie de l'élève.
 - Donner des exemples liés au contexte togolais quand pertinent.
 - Si image d'exercice floue, demander une photo plus nette avant de résoudre.
@@ -23,6 +24,7 @@ Contraintes:
 
 type ChatRequest = {
   userId?: string;
+  fullName?: string;
   phone?: string;
   classe?: string;
   domaine?: string;
@@ -53,7 +55,7 @@ export async function POST(req: Request) {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
     const genAI = new GoogleGenerativeAI(geminiApiKey);
 
-    const { userId, phone, classe, domaine, matiere, message, imageBase64, imageMimeType }: ChatRequest =
+    const { userId, fullName, phone, classe, domaine, matiere, message, imageBase64, imageMimeType }: ChatRequest =
       await req.json();
 
     if (!userId || (!message && !imageBase64)) {
@@ -98,13 +100,19 @@ export async function POST(req: Request) {
       profile = insertedProfile;
     }
 
-    if (profile && (phone || classe)) {
+    if (profile && (phone || classe || typeof fullName === "string")) {
       const nextPhone = phone ?? profile.phone ?? null;
       const nextClasse = classe ?? profile.classe ?? null;
-      if (nextPhone !== profile.phone || nextClasse !== profile.classe) {
+      const nextFullName =
+        typeof fullName === "string" ? (fullName.trim() || null) : (profile.full_name ?? null);
+      if (
+        nextPhone !== profile.phone ||
+        nextClasse !== profile.classe ||
+        nextFullName !== (profile.full_name ?? null)
+      ) {
         const { data: updatedProfile } = await supabase
           .from("profiles")
-          .update({ phone: nextPhone, classe: nextClasse })
+          .update({ phone: nextPhone, classe: nextClasse, full_name: nextFullName })
           .eq("id", userId)
           .select("id, full_name, phone, classe, preferred_tutor_gender, is_premium, premium_until")
           .single();
@@ -226,13 +234,19 @@ Règle de concision pour 1ère:
       profile?.preferred_tutor_gender === "male"
         ? "Tu incarnes un Prof."
         : "Tu incarnes une Professeure.";
+    const studentName =
+      (typeof fullName === "string" && fullName.trim()) ||
+      (typeof profile?.full_name === "string" && profile.full_name.trim()) ||
+      null;
 
     const userContext = `
+Nom de l'élève: ${studentName || "Non précisé"}
 Classe: ${classe || "Non précisée"}
 Domaine: ${domaine || "Non précisé"}
 Matière: ${matiere || "Non précisée"}
 Question: ${message || "Voir image envoyée"}
 ${tutorPersona}
+${studentName ? `Adresse-toi directement à ${studentName} dans la réponse.` : ""}
 ${brevityByClasse}
 `;
 
