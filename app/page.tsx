@@ -531,13 +531,13 @@ export default function ChatPage() {
         ["--accent" as string]: theme.accent,
         ["--accent-soft" as string]: theme.soft,
       }}
-      className={`flex h-[calc(100vh-9rem)] gap-2 ${isDarkTheme ? "text-white" : ""}`}
+      className={`flex h-[calc(100dvh-9rem)] gap-2 md:h-[calc(100vh-9rem)] ${isDarkTheme ? "text-white" : ""}`}
     >
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-72 transform overflow-y-auto border-r p-2.5 shadow-lg transition-transform md:static md:z-0 md:block md:w-72 md:translate-x-0 md:rounded-2xl md:border md:shadow-sm ${
+        className={`fixed inset-y-0 left-0 z-40 w-72 transform overflow-y-auto border-r p-2.5 shadow-lg transition-transform md:static md:z-0 md:block md:w-72 md:translate-x-0 md:rounded-2xl md:border md:shadow-sm md:pointer-events-auto ${
           isDarkTheme ? "border-slate-700 bg-slate-900" : "bg-white"
         } ${
-          showSidebar ? "translate-x-0" : "-translate-x-full"
+          showSidebar ? "translate-x-0 pointer-events-auto" : "-translate-x-full pointer-events-none"
         }`}
       >
         <div className="mb-3 flex items-center justify-between md:hidden">
