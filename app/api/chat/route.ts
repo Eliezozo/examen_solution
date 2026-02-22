@@ -114,10 +114,40 @@ export async function POST(req: Request) {
       }
     }
 
-    const premiumActive =
+    let resolvedPremiumUntil = (profile?.premium_until as string | null) ?? null;
+    let premiumActive =
       Boolean(profile?.is_premium) &&
-      Boolean(profile?.premium_until) &&
-      new Date(profile.premium_until as string) > new Date(nowIso);
+      Boolean(resolvedPremiumUntil) &&
+      new Date(resolvedPremiumUntil as string) > new Date(nowIso);
+
+    // Fallback: si le profil est désynchronisé, on lit le dernier paiement approuvé non expiré.
+    if (!premiumActive) {
+      const { data: approvedTx, error: approvedTxError } = await supabase
+        .from("payment_transactions")
+        .select("premium_until")
+        .eq("user_id", userId)
+        .eq("status", "approved")
+        .not("premium_until", "is", null)
+        .gt("premium_until", nowIso)
+        .order("premium_until", { ascending: false })
+        .limit(1)
+        .maybeSingle<{ premium_until: string | null }>();
+
+      if (approvedTxError) {
+        return NextResponse.json({ error: approvedTxError.message }, { status: 500 });
+      }
+
+      if (approvedTx?.premium_until) {
+        resolvedPremiumUntil = approvedTx.premium_until;
+        premiumActive = true;
+
+        // Synchronisation profil pour éviter de retomber sur le cas au prochain appel.
+        await supabase
+          .from("profiles")
+          .update({ is_premium: true, premium_until: resolvedPremiumUntil })
+          .eq("id", userId);
+      }
+    }
 
     const { count: usedCount, error: countError } = await supabase
       .from("history")
@@ -139,7 +169,7 @@ export async function POST(req: Request) {
           message: "Pass requis.",
           freeLeft,
           premiumActive: false,
-          premiumUntil: profile?.premium_until ?? null,
+          premiumUntil: resolvedPremiumUntil,
         },
         { status: 402 }
       );
@@ -211,7 +241,7 @@ ${brevityByClasse}
       response: responseText,
       freeLeft: premiumActive ? freeLeft : Math.max(0, freeLeft - 1),
       premiumActive,
-      premiumUntil: profile?.premium_until ?? null,
+      premiumUntil: resolvedPremiumUntil,
       fullName: profile?.full_name ?? null,
       phone: profile?.phone ?? null,
       classe: profile?.classe ?? null,

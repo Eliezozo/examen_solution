@@ -68,6 +68,7 @@ Définies dans `.env.example`:
 - Webhook idempotent pour paiements approuvés.
 - Flux premium/parrainage déjà opérationnel.
 - Application majoritairement stateless, adaptée à la montée en charge.
+- Contrôle premium renforcé sur le chat: fallback sur `payment_transactions` approuvées si `profiles` est désynchronisé.
 
 ## 8) Points d'attention
 - RLS est actuellement permissif (`select/insert/update` avec `true`) pour le mode MVP sans auth stricte.
@@ -82,3 +83,9 @@ Un fichier PM2 de cluster a été ajouté: `ecosystem.config.cjs`.
 
 Cela permet d'exploiter plusieurs cœurs CPU en production.
 
+## 10) Correctif récent (premium manuel)
+- Problème traité: certains comptes activés manuellement restaient bloqués par la demande de paiement.
+- Correctif appliqué dans `app/api/chat/route.ts`:
+  - vérification premium d'abord sur `profiles`,
+  - puis fallback sur `payment_transactions` (`status = approved` et `premium_until > now()`),
+  - synchronisation automatique de `profiles` si une transaction premium valide est trouvée.
