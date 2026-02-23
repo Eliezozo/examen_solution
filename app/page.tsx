@@ -8,6 +8,7 @@ type ChatItem = {
   role: "user" | "assistant";
   text: string;
   imagePreview?: string;
+  attachmentLabels?: string[];
 };
 
 type PlanId = "pass_monthly" | "pass_yearly";
@@ -50,6 +51,12 @@ type ReferralCommission = {
   payout_phone: string;
   payout_status: string;
   created_at: string;
+};
+
+type ChatAttachmentInput = {
+  name: string;
+  mimeType: string;
+  base64: string;
 };
 
 const CLASSES = ["CM2", "3ème", "1ère"];
@@ -127,6 +134,7 @@ function scrollToBottomSafe(target: Element | null) {
 
 export default function ChatPage() {
   const [userId, setUserId] = useState("");
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("+228 ");
   const [classe, setClasse] = useState("CM2");
@@ -138,7 +146,12 @@ export default function ChatPage() {
 
   const [message, setMessage] = useState("");
   const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [imageMimeType, setImageMimeType] = useState("image/jpeg");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [fileAttachment, setFileAttachment] = useState<ChatAttachmentInput | null>(null);
+  const [audioAttachment, setAudioAttachment] = useState<ChatAttachmentInput | null>(null);
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
   const [chat, setChat] = useState<ChatItem[]>([
     {
       role: "assistant",
@@ -171,6 +184,9 @@ export default function ChatPage() {
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const premiumPopupShownRef = useRef(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
 
   const theme = useMemo(
     () => THEME_OPTIONS.find((item) => item.id === themeColor) ?? THEME_OPTIONS[0],
@@ -192,6 +208,11 @@ export default function ChatPage() {
     if (!premiumUntil) return false;
     return new Date(premiumUntil) > new Date();
   }, [premiumUntil]);
+
+  const mustCompletePhoneProfile = useMemo(
+    () => profileLoaded && !TOGO_PHONE_REGEX.test(phone),
+    [profileLoaded, phone]
+  );
 
   useEffect(() => {
     setUserId(getOrCreateUserId());
@@ -215,6 +236,12 @@ export default function ChatPage() {
     void loadHistory(userId);
     void loadRewards(userId);
   }, [userId]);
+
+  useEffect(() => {
+    if (mustCompletePhoneProfile) {
+      setShowSidebar(true);
+    }
+  }, [mustCompletePhoneProfile]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -247,22 +274,35 @@ export default function ChatPage() {
     return () => window.clearTimeout(timer);
   }, [premiumActive]);
 
-  async function loadProfile(id: string) {
-    const res = await fetch(`/api/profile?userId=${encodeURIComponent(id)}`);
-    const data = await res.json();
-    if (!res.ok || !data?.profile) return;
+  useEffect(() => {
+    return () => {
+      if (audioPreviewUrl) {
+        URL.revokeObjectURL(audioPreviewUrl);
+      }
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, [audioPreviewUrl]);
 
-    const profile: Profile = data.profile;
-    if (profile.full_name) setFullName(profile.full_name);
-    if (profile.phone) setPhone(profile.phone);
-    if (profile.classe) setClasse(profile.classe);
-    if (profile.theme_color) setThemeColor(profile.theme_color);
-    if (profile.preferred_tutor_gender) setTutorGender(profile.preferred_tutor_gender);
-    if (typeof profile.referral_balance === "number") setReferralBalance(profile.referral_balance);
-    if (typeof profile.total_referral_earnings === "number") {
-      setTotalReferralEarnings(profile.total_referral_earnings);
+  async function loadProfile(id: string) {
+    try {
+      const res = await fetch(`/api/profile?userId=${encodeURIComponent(id)}`);
+      const data = await res.json();
+      if (!res.ok || !data?.profile) return;
+
+      const profile: Profile = data.profile;
+      if (profile.full_name) setFullName(profile.full_name);
+      if (profile.phone) setPhone(profile.phone);
+      if (profile.classe) setClasse(profile.classe);
+      if (profile.theme_color) setThemeColor(profile.theme_color);
+      if (profile.preferred_tutor_gender) setTutorGender(profile.preferred_tutor_gender);
+      if (typeof profile.referral_balance === "number") setReferralBalance(profile.referral_balance);
+      if (typeof profile.total_referral_earnings === "number") {
+        setTotalReferralEarnings(profile.total_referral_earnings);
+      }
+      if (profile.premium_until) setPremiumUntil(profile.premium_until);
+    } finally {
+      setProfileLoaded(true);
     }
-    if (profile.premium_until) setPremiumUntil(profile.premium_until);
   }
 
   async function loadHistory(id: string) {
@@ -341,6 +381,9 @@ export default function ChatPage() {
 
       setChat((prev) => [...prev, { role: "assistant", text: "Profil mis à jour." }]);
       await loadProfile(userId);
+      if (TOGO_PHONE_REGEX.test(phone)) {
+        setShowSidebar(false);
+      }
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : "Erreur inconnue";
       setChat((prev) => [...prev, { role: "assistant", text: `Erreur profil: ${errMsg}` }]);
@@ -362,18 +405,109 @@ export default function ChatPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     await setImageFromFile(file);
+    e.target.value = "";
   }
 
   async function setImageFromFile(file: File) {
     const b64 = await toBase64(file);
     setImageBase64(b64);
+    setImageMimeType(file.type || "image/jpeg");
     const canCreateObjectUrl =
       typeof URL !== "undefined" && typeof URL.createObjectURL === "function";
     setImagePreview(canCreateObjectUrl ? URL.createObjectURL(file) : null);
   }
 
+  async function onFileAttachmentChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      setChat((prev) => [
+        ...prev,
+        { role: "assistant", text: "Fichier trop volumineux. Limite: 8 Mo." },
+      ]);
+      e.target.value = "";
+      return;
+    }
+
+    const b64 = await toBase64(file);
+    setFileAttachment({
+      name: file.name,
+      mimeType: file.type || "application/octet-stream",
+      base64: b64,
+    });
+    e.target.value = "";
+  }
+
+  async function startAudioRecording() {
+    if (isRecordingAudio) return;
+    if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setChat((prev) => [
+        ...prev,
+        { role: "assistant", text: "Enregistrement audio non supporté sur cet appareil." },
+      ]);
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      audioChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const blob = new Blob(audioChunksRef.current, {
+          type: recorder.mimeType || "audio/webm",
+        });
+
+        if (audioPreviewUrl) {
+          URL.revokeObjectURL(audioPreviewUrl);
+        }
+
+        const previewUrl = URL.createObjectURL(blob);
+        setAudioPreviewUrl(previewUrl);
+        const audioFile = new File([blob], "note-vocale.webm", {
+          type: recorder.mimeType || "audio/webm",
+        });
+        const b64 = await toBase64(audioFile);
+        setAudioAttachment({
+          name: audioFile.name,
+          mimeType: audioFile.type || "audio/webm",
+          base64: b64,
+        });
+        mediaRecorderRef.current = null;
+        mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+        setIsRecordingAudio(false);
+      };
+
+      recorder.start();
+      setIsRecordingAudio(true);
+    } catch {
+      setChat((prev) => [
+        ...prev,
+        { role: "assistant", text: "Impossible d'accéder au micro. Vérifie les autorisations." },
+      ]);
+    }
+  }
+
+  function stopAudioRecording() {
+    if (!mediaRecorderRef.current || !isRecordingAudio) return;
+    mediaRecorderRef.current.stop();
+  }
+
   async function onSend() {
-    if (!userId || (!message.trim() && !imageBase64)) return;
+    const attachments: ChatAttachmentInput[] = [];
+    if (fileAttachment) attachments.push(fileAttachment);
+    if (audioAttachment) attachments.push(audioAttachment);
+
+    if (!userId || (!message.trim() && attachments.length === 0)) return;
     if (!TOGO_PHONE_REGEX.test(phone)) {
       setChat((prev) => [
         ...prev,
@@ -390,8 +524,9 @@ export default function ChatPage() {
       ...prev,
       {
         role: "user",
-        text: message || "Photo envoyée",
+        text: message || "Contenu envoyé",
         imagePreview: imagePreview ?? undefined,
+        attachmentLabels: attachments.map((item) => item.name),
       },
     ]);
 
@@ -404,7 +539,8 @@ export default function ChatPage() {
       matiere,
       message,
       imageBase64,
-      imageMimeType: "image/jpeg",
+      imageMimeType,
+      attachments,
     };
 
     setMessage("");
@@ -429,7 +565,14 @@ export default function ChatPage() {
 
       setChat((prev) => [...prev, { role: "assistant", text: data.response }]);
       setImageBase64(null);
+      setImageMimeType("image/jpeg");
       setImagePreview(null);
+      setFileAttachment(null);
+      setAudioAttachment(null);
+      if (audioPreviewUrl) {
+        URL.revokeObjectURL(audioPreviewUrl);
+        setAudioPreviewUrl(null);
+      }
       await loadHistory(userId);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Erreur inconnue";
@@ -538,6 +681,10 @@ export default function ChatPage() {
   }
 
   function logout() {
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    if (audioPreviewUrl) {
+      URL.revokeObjectURL(audioPreviewUrl);
+    }
     try {
       window.localStorage.removeItem("rtogo_user_id");
     } catch {
@@ -546,6 +693,7 @@ export default function ChatPage() {
     const nextId = getOrCreateUserId();
 
     setUserId(nextId);
+    setProfileLoaded(false);
     setFullName("");
     setPhone("+228 ");
     setClasse("CM2");
@@ -554,12 +702,20 @@ export default function ChatPage() {
     setThemeColor("green");
     setTutorGender("female");
     setPremiumUntil(null);
+    setImageBase64(null);
+    setImageMimeType("image/jpeg");
+    setImagePreview(null);
+    setFileAttachment(null);
+    setAudioAttachment(null);
+    setAudioPreviewUrl(null);
+    setIsRecordingAudio(false);
     setFreeLeft(2);
     setReferralBalance(0);
     setTotalReferralEarnings(0);
     setNotifications([]);
     setCommissions([]);
     setHistory([]);
+    setShowSidebar(false);
     setChat([
       {
         role: "assistant",
@@ -577,15 +733,21 @@ export default function ChatPage() {
       className={`flex h-[calc(100vh-9rem)] supports-[height:100dvh]:h-[calc(100dvh-9rem)] gap-2 ${isDarkTheme ? "text-white" : ""}`}
     >
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-72 transform overflow-y-auto border-r p-2.5 shadow-lg transition-transform md:static md:z-0 md:block md:w-72 md:translate-x-0 md:rounded-2xl md:border md:shadow-sm md:pointer-events-auto ${
+        className={`fixed inset-y-0 z-40 w-72 overflow-y-auto border-r p-2.5 shadow-lg transition-[left] duration-200 md:static md:z-0 md:block md:w-72 md:left-auto md:rounded-2xl md:border md:shadow-sm md:pointer-events-auto ${
           isDarkTheme ? "border-slate-700 bg-slate-900" : "bg-white"
         } ${
-          showSidebar ? "translate-x-0 pointer-events-auto" : "-translate-x-full pointer-events-none"
+          showSidebar ? "left-0 pointer-events-auto" : "-left-80 pointer-events-none"
         }`}
       >
         <div className="mb-3 flex items-center justify-between md:hidden">
           <p className="font-semibold">Menu</p>
-          <button onClick={() => setShowSidebar(false)} className="rounded-lg border px-2 py-1 text-xs">
+          <button
+            type="button"
+            onClick={() => {
+              if (!mustCompletePhoneProfile) setShowSidebar(false);
+            }}
+            className="rounded-lg border px-2 py-1 text-xs"
+          >
             Fermer
           </button>
         </div>
@@ -594,6 +756,12 @@ export default function ChatPage() {
           <p className="text-sm font-semibold" style={{ color: "var(--accent)" }}>
             Profil
           </p>
+          {mustCompletePhoneProfile && (
+            <p className="rounded-lg bg-yellow-100 p-2 text-xs text-yellow-900">
+              Première connexion: renseigne ton numéro au format `+228 XXXXXXXX`, puis clique
+              sur "Mettre à jour".
+            </p>
+          )}
           <input
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
@@ -722,7 +890,9 @@ export default function ChatPage() {
         <button
           type="button"
           aria-label="Fermer le menu"
-          onClick={() => setShowSidebar(false)}
+          onClick={() => {
+            if (!mustCompletePhoneProfile) setShowSidebar(false);
+          }}
           className="fixed inset-0 z-30 bg-black/35 md:hidden"
         />
       )}
@@ -789,6 +959,11 @@ export default function ChatPage() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={item.imagePreview} alt="Exercice" className="mt-2 h-28 rounded-lg object-cover" />
                 )}
+                {item.attachmentLabels && item.attachmentLabels.length > 0 && (
+                  <p className="mt-2 text-xs opacity-90">
+                    Pièces jointes: {item.attachmentLabels.join(", ")}
+                  </p>
+                )}
               </div>
             </div>
           ))}
@@ -815,10 +990,44 @@ export default function ChatPage() {
                 onClick={() => {
                   setImagePreview(null);
                   setImageBase64(null);
+                  setImageMimeType("image/jpeg");
                 }}
                 className="rounded-lg border px-2 py-1 text-xs"
               >
                 Retirer
+              </button>
+            </div>
+          )}
+          {fileAttachment && (
+            <div className={`mb-2 flex items-center justify-between gap-2 rounded-lg border p-2 text-xs ${isDarkTheme ? "border-slate-600 bg-slate-800" : "bg-slate-50"}`}>
+              <p className="truncate">Fichier: {fileAttachment.name}</p>
+              <button
+                type="button"
+                onClick={() => setFileAttachment(null)}
+                className="rounded-lg border px-2 py-1"
+              >
+                Retirer
+              </button>
+            </div>
+          )}
+          {audioAttachment && audioPreviewUrl && (
+            <div className={`mb-2 rounded-lg border p-2 text-xs ${isDarkTheme ? "border-slate-600 bg-slate-800" : "bg-slate-50"}`}>
+              <p>Vocal prêt: {audioAttachment.name}</p>
+              <audio controls className="mt-1 w-full">
+                <source src={audioPreviewUrl} type={audioAttachment.mimeType} />
+              </audio>
+              <button
+                type="button"
+                onClick={() => {
+                  setAudioAttachment(null);
+                  if (audioPreviewUrl) {
+                    URL.revokeObjectURL(audioPreviewUrl);
+                  }
+                  setAudioPreviewUrl(null);
+                }}
+                className="mt-2 rounded-lg border px-2 py-1"
+              >
+                Retirer le vocal
               </button>
             </div>
           )}
@@ -828,6 +1037,28 @@ export default function ChatPage() {
               Photo
               <input type="file" accept="image/*" capture="environment" onChange={onImageChange} className="hidden" />
             </label>
+            <label className="cursor-pointer rounded-lg bg-slate-200 px-3 py-2 text-xs font-semibold text-slate-900">
+              Fichier
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx,.txt,.csv,.png,.jpg,.jpeg,.webp,.mp3,.wav,.m4a,.webm"
+                onChange={onFileAttachmentChange}
+                className="hidden"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={isRecordingAudio ? stopAudioRecording : startAudioRecording}
+              className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+                isRecordingAudio
+                  ? "bg-red-600 text-white"
+                  : isDarkTheme
+                  ? "bg-slate-700 text-white"
+                  : "bg-slate-800 text-white"
+              }`}
+            >
+              {isRecordingAudio ? "Stop vocal" : "Vocal"}
+            </button>
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}

@@ -32,6 +32,11 @@ type ChatRequest = {
   message?: string;
   imageBase64?: string;
   imageMimeType?: string;
+  attachments?: Array<{
+    name?: string;
+    mimeType?: string;
+    base64?: string;
+  }>;
 };
 
 const TOGO_PHONE_REGEX = /^\+228 [0-9]{8}$/;
@@ -55,10 +60,22 @@ export async function POST(req: Request) {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
     const genAI = new GoogleGenerativeAI(geminiApiKey);
 
-    const { userId, fullName, phone, classe, domaine, matiere, message, imageBase64, imageMimeType }: ChatRequest =
+    const { userId, fullName, phone, classe, domaine, matiere, message, imageBase64, imageMimeType, attachments }: ChatRequest =
       await req.json();
 
-    if (!userId || (!message && !imageBase64)) {
+    const normalizedAttachments = Array.isArray(attachments)
+      ? attachments
+          .filter(
+            (item) =>
+              typeof item?.base64 === "string" &&
+              item.base64.length > 0 &&
+              typeof item?.mimeType === "string" &&
+              item.mimeType.length > 0
+          )
+          .slice(0, 3)
+      : [];
+
+    if (!userId || (!message && !imageBase64 && normalizedAttachments.length === 0)) {
       return NextResponse.json({ error: "Données insuffisantes." }, { status: 400 });
     }
     if (phone && !TOGO_PHONE_REGEX.test(phone)) {
@@ -244,7 +261,7 @@ Nom de l'élève: ${studentName || "Non précisé"}
 Classe: ${classe || "Non précisée"}
 Domaine: ${domaine || "Non précisé"}
 Matière: ${matiere || "Non précisée"}
-Question: ${message || "Voir image envoyée"}
+Question: ${message || (imageBase64 || normalizedAttachments.length > 0 ? "Voir pièces jointes envoyées" : "Non précisée")}
 ${tutorPersona}
 ${studentName ? `Adresse-toi directement à ${studentName} dans la réponse.` : ""}
 ${brevityByClasse}
@@ -259,6 +276,16 @@ ${brevityByClasse}
         inlineData: {
           data: imageBase64,
           mimeType: imageMimeType || "image/jpeg",
+        },
+      });
+    }
+
+    for (const attachment of normalizedAttachments) {
+      if (!attachment.base64 || attachment.base64.length > 12_000_000) continue;
+      parts.push({
+        inlineData: {
+          data: attachment.base64,
+          mimeType: attachment.mimeType || "application/octet-stream",
         },
       });
     }

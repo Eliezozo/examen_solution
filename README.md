@@ -4,11 +4,13 @@ Application web éducative pour les élèves togolais (CM2, 3ème, 1ère) avec a
 
 ## Fonctionnalités
 - Chat IA avec réponses pédagogiques structurées en méthode APC.
+- Upload de pièces jointes (image/fichier) et note vocale audio.
 - Gestion profil élève (nom, téléphone, classe, thème, préférence tuteur).
 - Historique des échanges.
 - Mode gratuit limité, puis déblocage premium.
 - Paiement FedaPay (webhook de confirmation).
 - Parrainage + notifications.
+- Page admin pour gérer les utilisateurs premium.
 
 ## Stack
 - Next.js 14 + React 18 + TypeScript
@@ -75,3 +77,12 @@ npm run start
 - `GET /api/payment/status`
 - `POST /api/payment/webhook`
 - `POST /api/payment/manual`
+- `GET/PATCH /api/admin/users` (clé `MANUAL_PREMIUM_ADMIN_KEY`)
+
+## Administration
+- Interface admin: `/admin`
+- Renseigner la clé admin (même valeur que `MANUAL_PREMIUM_ADMIN_KEY`) pour:
+  - lister/rechercher les utilisateurs,
+  - filtrer premium,
+  - activer le premium (ajout en jours),
+  - retirer le premium.
