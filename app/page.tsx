@@ -191,6 +191,7 @@ export default function ChatPage() {
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const premiumPopupShownRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -445,13 +446,35 @@ export default function ChatPage() {
     e.target.value = "";
   }
 
+  async function onAudioFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      setChat((prev) => [
+        ...prev,
+        { role: "assistant", text: "Audio trop volumineux. Limite: 8 Mo." },
+      ]);
+      e.target.value = "";
+      return;
+    }
+
+    if (audioPreviewUrl) {
+      URL.revokeObjectURL(audioPreviewUrl);
+    }
+    setAudioPreviewUrl(URL.createObjectURL(file));
+    const b64 = await toBase64(file);
+    setAudioAttachment({
+      name: file.name || "note-vocale",
+      mimeType: file.type || "audio/mpeg",
+      base64: b64,
+    });
+    e.target.value = "";
+  }
+
   async function startAudioRecording() {
     if (isRecordingAudio) return;
     if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      setChat((prev) => [
-        ...prev,
-        { role: "assistant", text: "Enregistrement audio non supporté sur cet appareil." },
-      ]);
+      audioInputRef.current?.click();
       return;
     }
 
@@ -497,10 +520,7 @@ export default function ChatPage() {
       recorder.start();
       setIsRecordingAudio(true);
     } catch {
-      setChat((prev) => [
-        ...prev,
-        { role: "assistant", text: "Impossible d'accéder au micro. Vérifie les autorisations." },
-      ]);
+      audioInputRef.current?.click();
     }
   }
 
@@ -624,6 +644,14 @@ export default function ChatPage() {
     setIsNearBottom(distance < 120);
   }
 
+  function closeSidebarIfAllowed() {
+    if (!mustCompletePhoneProfile) setShowSidebar(false);
+  }
+
+  function openSidebar() {
+    setShowSidebar(true);
+  }
+
   async function onSimulatePayment() {
     if (!userId) return;
     if (!fullName.trim()) {
@@ -728,28 +756,14 @@ export default function ChatPage() {
     }
   }
 
-  return (
-    <section
-      style={{
-        ["--accent" as string]: theme.accent,
-        ["--accent-soft" as string]: theme.soft,
-      }}
-      className={`flex h-[calc(100vh-9rem)] supports-[height:100dvh]:h-[calc(100dvh-9rem)] gap-2 ${isDarkTheme ? "text-white" : ""}`}
-    >
-      <aside
-        className={`fixed inset-y-0 z-40 w-72 overflow-y-auto border-r p-2.5 shadow-lg transition-[left] duration-200 md:static md:z-0 md:block md:w-72 md:left-auto md:rounded-2xl md:border md:shadow-sm md:pointer-events-auto ${
-          isDarkTheme ? "border-slate-700 bg-slate-900" : "bg-white"
-        } ${
-          showSidebar ? "left-0 pointer-events-auto" : "-left-80 pointer-events-none"
-        }`}
-      >
+  function renderSidebarContent() {
+    return (
+      <>
         <div className="mb-3 flex items-center justify-between md:hidden">
           <p className="font-semibold">Menu</p>
           <button
             type="button"
-            onClick={() => {
-              if (!mustCompletePhoneProfile) setShowSidebar(false);
-            }}
+            onPointerUp={closeSidebarIfAllowed}
             className="rounded-lg border px-2 py-1 text-xs"
           >
             Fermer
@@ -813,7 +827,7 @@ export default function ChatPage() {
             <option value="male">Je préfère un Prof</option>
           </select>
           <button
-            onClick={saveProfile}
+            onPointerUp={saveProfile}
             disabled={profileSaving}
             style={{ backgroundColor: "var(--accent)" }}
             className="w-full rounded-lg p-2 text-xs font-semibold text-white disabled:opacity-60"
@@ -888,21 +902,41 @@ export default function ChatPage() {
             ))}
           </div>
         </div>
+      </>
+    );
+  }
+
+  return (
+    <section
+      style={{
+        ["--accent" as string]: theme.accent,
+        ["--accent-soft" as string]: theme.soft,
+      }}
+      className={`flex min-h-0 h-[calc(100vh-9rem)] supports-[height:100dvh]:h-[calc(100dvh-9rem)] gap-2 ${isDarkTheme ? "text-white" : ""}`}
+    >
+      <aside
+        className={`hidden md:block md:w-72 md:overflow-y-auto md:rounded-2xl md:border md:p-2.5 md:shadow-sm ${
+          isDarkTheme ? "md:border-slate-700 md:bg-slate-900" : "md:bg-white"
+        }`}
+      >
+        {renderSidebarContent()}
       </aside>
 
       {showSidebar && (
-        <button
-          type="button"
-          aria-label="Fermer le menu"
-          onClick={() => {
-            if (!mustCompletePhoneProfile) setShowSidebar(false);
-          }}
-          className="fixed inset-0 z-30 bg-black/35 md:hidden"
-        />
+        <div className="fixed inset-0 z-40 md:hidden">
+          <div className="absolute inset-0 bg-black/35" onPointerUp={closeSidebarIfAllowed} />
+          <aside
+            className={`absolute inset-y-0 left-0 w-72 overflow-y-auto border-r p-2.5 shadow-lg ${
+              isDarkTheme ? "border-slate-700 bg-slate-900 text-white" : "bg-white"
+            }`}
+          >
+            {renderSidebarContent()}
+          </aside>
+        </div>
       )}
 
       <div
-        className={`flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border shadow-sm ${
+        className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border shadow-sm ${
           isDarkTheme ? "border-slate-700 bg-slate-900" : "bg-white"
         }`}
       >
@@ -913,7 +947,7 @@ export default function ChatPage() {
         >
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowSidebar(true)}
+              onPointerUp={openSidebar}
               aria-label="Ouvrir le menu latéral"
               className={`mobile-sidebar-arrow rounded-lg border px-2 py-1 text-sm md:hidden ${
                 isDarkTheme ? "border-slate-600 bg-slate-900 text-white" : "bg-white text-slate-700"
@@ -935,7 +969,7 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <div ref={chatScrollRef} onScroll={onChatScroll} className="flex-1 space-y-3 overflow-y-auto p-3">
+        <div ref={chatScrollRef} onScroll={onChatScroll} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
           {chat.map((item, index) => (
             <div key={`${item.role}-${index}`} className={`flex ${item.role === "user" ? "justify-end" : "justify-start"}`}>
               <div
@@ -985,7 +1019,9 @@ export default function ChatPage() {
           <div ref={chatEndRef} />
         </div>
 
-        <div className="border-t p-3">
+        <div className={`sticky bottom-0 z-20 border-t p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] ${
+          isDarkTheme ? "border-slate-700 bg-slate-900/95" : "bg-white/95"
+        }`}>
           {imagePreview && (
             <div className={`mb-2 flex items-center gap-2 rounded-lg border p-2 ${isDarkTheme ? "border-slate-600 bg-slate-800" : "bg-slate-50"}`}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1044,10 +1080,18 @@ export default function ChatPage() {
               onChange={onFileAttachmentChange}
               className="hidden"
             />
+            <input
+              ref={audioInputRef}
+              type="file"
+              accept="audio/*"
+              capture="environment"
+              onChange={onAudioFileChange}
+              className="hidden"
+            />
             <button
               type="button"
               aria-label="Ajouter un fichier"
-              onClick={() => fileInputRef.current?.click()}
+              onPointerUp={() => fileInputRef.current?.click()}
               className={`p-2 ${isDarkTheme ? "text-slate-100" : "text-slate-700"} disabled:opacity-60`}
             >
               <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
@@ -1057,7 +1101,7 @@ export default function ChatPage() {
             <button
               type="button"
               aria-label={isRecordingAudio ? "Arrêter l'enregistrement vocal" : "Démarrer l'enregistrement vocal"}
-              onClick={isRecordingAudio ? stopAudioRecording : startAudioRecording}
+              onPointerUp={isRecordingAudio ? stopAudioRecording : startAudioRecording}
               className={`p-2 ${
                 isRecordingAudio ? "text-red-600" : isDarkTheme ? "text-slate-100" : "text-slate-700"
               }`}
@@ -1078,7 +1122,7 @@ export default function ChatPage() {
             <button
               type="button"
               aria-label="Envoyer"
-              onClick={onSend}
+              onPointerUp={onSend}
               disabled={loading}
               style={{ color: "var(--accent)" }}
               className="p-2 disabled:opacity-60"

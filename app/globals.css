@@ -16,6 +16,12 @@ body {
   font-family: "Poppins", "Segoe UI", sans-serif;
 }
 
+html,
+body {
+  min-height: 100%;
+  height: -webkit-fill-available;
+}
+
 button,
 [role="button"],
 label,
