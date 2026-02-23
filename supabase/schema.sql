@@ -4,7 +4,7 @@ create table if not exists public.profiles (
   id uuid primary key,
   full_name text,
   phone text,
-  classe text check (classe in ('CM2', '3ème', '1ère')),
+  classe text check (classe in ('CM2', '3ème', '1ère', 'Terminale')),
   theme_color text not null default 'green',
   preferred_tutor_gender text not null default 'female',
   referral_balance integer not null default 0,
@@ -24,6 +24,14 @@ alter table public.profiles
   add column if not exists referral_balance integer not null default 0;
 alter table public.profiles
   add column if not exists total_referral_earnings integer not null default 0;
+
+alter table public.profiles
+  drop constraint if exists profiles_classe_check;
+alter table public.profiles
+  drop constraint if exists profiles_classe_allowed;
+alter table public.profiles
+  add constraint profiles_classe_allowed
+  check (classe in ('CM2', '3ème', '1ère', 'Terminale'));
 
 -- Nettoyage des anciennes données avant contrainte:
 -- tout numéro qui ne respecte pas +228 XXXXXXXX passe à NULL.

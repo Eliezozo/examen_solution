@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const SYSTEM_PROMPT = `
-Tu es un tuteur IA pour les élèves togolais (CM2, 3ème, 1ère).
+Tu es un tuteur IA pour les élèves togolais (CM2, 3ème, 1ère, Terminale).
 Tu dois répondre STRICTEMENT selon la démarche APC en 3 sections obligatoires:
 1) Analyse de la situation-problème
 2) Mobilisation des ressources (rappels de cours, notions, formules)
@@ -262,6 +262,13 @@ Règle de concision renforcée pour ${classe}:
 - Utiliser des phrases très courtes.
 - Garder APC en 3 mini-sections.
 - Éviter les détails théoriques inutiles.
+`
+        : classe === "Terminale"
+        ? `
+Règle de concision pour Terminale:
+- Maximum 140 mots.
+- APC clair, avec justification rapide des étapes.
+- Mettre l'accent sur méthode + vérification finale.
 `
         : `
 Règle de concision pour 1ère:

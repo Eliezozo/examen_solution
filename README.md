@@ -1,6 +1,6 @@
 # Réussite Togo APC
 
-Application web éducative pour les élèves togolais (CM2, 3ème, 1ère) avec assistant IA (APC), abonnements premium et paiements FedaPay.
+Application web éducative pour les élèves togolais (CM2, 3ème, 1ère, Terminale) avec assistant IA (APC), abonnements premium et paiements FedaPay.
 
 ## Fonctionnalités
 - Chat IA avec réponses pédagogiques structurées en méthode APC.

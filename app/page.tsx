@@ -59,13 +59,19 @@ type ChatAttachmentInput = {
   base64: string;
 };
 
-const CLASSES = ["CM2", "3ème", "1ère"];
+const CLASSES = ["CM2", "3ème", "1ère", "Terminale"];
 const TOGO_PHONE_REGEX = /^\+228 [0-9]{8}$/;
 
 const DOMAINES: Array<{ name: string; matieres: string[] }> = [
-  { name: "Sciences et Technologies", matieres: ["Mathématiques", "PCT", "SVT"] },
-  { name: "Communication", matieres: ["Français", "Anglais"] },
-  { name: "Univers Social", matieres: ["Histoire-Géographie", "ECM"] },
+  {
+    name: "Sciences et Technologies",
+    matieres: ["Mathématiques", "Physique-Chimie", "SVT", "Informatique"],
+  },
+  {
+    name: "Communication",
+    matieres: ["Français", "Anglais", "Espagnol", "Allemand"],
+  },
+  { name: "Univers Social", matieres: ["Histoire-Géographie", "ECM", "Économie"] },
   { name: "Développement Personnel", matieres: ["Philosophie"] },
 ];
 
@@ -196,7 +202,7 @@ export default function ChatPage() {
   const isDarkTheme = themeColor === "black";
 
   const domainesDisponibles = useMemo(() => {
-    if (classe === "1ère") return DOMAINES;
+    if (classe === "1ère" || classe === "Terminale") return DOMAINES;
     return DOMAINES.filter((d) => d.name !== "Développement Personnel");
   }, [classe]);
 
