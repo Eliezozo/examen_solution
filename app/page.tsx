@@ -686,14 +686,6 @@ export default function ChatPage() {
     if (audioPreviewUrl) {
       URL.revokeObjectURL(audioPreviewUrl);
     }
-    try {
-      window.localStorage.removeItem("rtogo_user_id");
-    } catch {
-      // Ignore storage access errors.
-    }
-    const nextId = getOrCreateUserId();
-
-    setUserId(nextId);
     setProfileLoaded(false);
     setFullName("");
     setPhone("+228 ");
@@ -710,7 +702,6 @@ export default function ChatPage() {
     setAudioAttachment(null);
     setAudioPreviewUrl(null);
     setIsRecordingAudio(false);
-    setFreeLeft(2);
     setReferralBalance(0);
     setTotalReferralEarnings(0);
     setNotifications([]);
@@ -720,9 +711,15 @@ export default function ChatPage() {
     setChat([
       {
         role: "assistant",
-        text: "### Session réinitialisée\nBonjour. Envoie ton exercice pour commencer.",
+        text: "### Session réinitialisée\nTes essais gratuits restent liés à ton numéro. Renseigne ton profil puis continue.",
       },
     ]);
+
+    if (userId) {
+      void loadProfile(userId);
+      void loadHistory(userId);
+      void loadRewards(userId);
+    }
   }
 
   return (

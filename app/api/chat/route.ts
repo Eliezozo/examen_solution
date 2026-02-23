@@ -62,6 +62,7 @@ export async function POST(req: Request) {
 
     const { userId, fullName, phone, classe, domaine, matiere, message, imageBase64, imageMimeType, attachments }: ChatRequest =
       await req.json();
+    const normalizedPhone = typeof phone === "string" ? phone.trim() : "";
 
     const normalizedAttachments = Array.isArray(attachments)
       ? attachments
@@ -78,7 +79,7 @@ export async function POST(req: Request) {
     if (!userId || (!message && !imageBase64 && normalizedAttachments.length === 0)) {
       return NextResponse.json({ error: "Données insuffisantes." }, { status: 400 });
     }
-    if (phone && !TOGO_PHONE_REGEX.test(phone)) {
+    if (normalizedPhone && !TOGO_PHONE_REGEX.test(normalizedPhone)) {
       return NextResponse.json(
         { error: "Numéro invalide. Format requis: +228 XXXXXXXX" },
         { status: 400 }
@@ -100,7 +101,7 @@ export async function POST(req: Request) {
         .from("profiles")
         .insert({
           id: userId,
-          phone: phone ?? null,
+          phone: normalizedPhone || null,
           classe: classe ?? null,
           full_name: null,
           preferred_tutor_gender: "female",
@@ -117,8 +118,8 @@ export async function POST(req: Request) {
       profile = insertedProfile;
     }
 
-    if (profile && (phone || classe || typeof fullName === "string")) {
-      const nextPhone = phone ?? profile.phone ?? null;
+    if (profile && (normalizedPhone || classe || typeof fullName === "string")) {
+      const nextPhone = normalizedPhone || profile.phone || null;
       const nextClasse = classe ?? profile.classe ?? null;
       const nextFullName =
         typeof fullName === "string" ? (fullName.trim() || null) : (profile.full_name ?? null);
@@ -175,11 +176,11 @@ export async function POST(req: Request) {
     }
 
     // Cas d'activation manuelle anticipée: premium attaché au téléphone avant 1ère session.
-    if (!premiumActive && phone) {
+    if (!premiumActive && normalizedPhone) {
       const { data: phonePremiumProfile, error: phonePremiumProfileError } = await supabase
         .from("profiles")
         .select("id, premium_until")
-        .eq("phone", phone)
+        .eq("phone", normalizedPhone)
         .neq("id", userId)
         .eq("is_premium", true)
         .not("premium_until", "is", null)
@@ -203,10 +204,31 @@ export async function POST(req: Request) {
       }
     }
 
+    const resolvedPhone = normalizedPhone || profile?.phone || "";
+    if (!resolvedPhone || !TOGO_PHONE_REGEX.test(resolvedPhone)) {
+      return NextResponse.json(
+        { error: "Numéro requis et invalide. Format: +228 XXXXXXXX" },
+        { status: 400 }
+      );
+    }
+
+    // Anti-abus: le quota gratuit est calculé par numéro (tous comptes confondus).
+    const { data: profileIds, error: profileIdsError } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("phone", resolvedPhone);
+
+    if (profileIdsError) {
+      return NextResponse.json({ error: profileIdsError.message }, { status: 500 });
+    }
+
+    const idsFromPhone = (profileIds ?? []).map((item) => item.id).filter(Boolean);
+    const idsForQuota = Array.from(new Set([userId, ...idsFromPhone]));
+
     const { count: usedCount, error: countError } = await supabase
       .from("history")
       .select("id", { count: "exact", head: true })
-      .eq("user_id", userId);
+      .in("user_id", idsForQuota);
 
     if (countError) {
       return NextResponse.json({ error: countError.message }, { status: 500 });
