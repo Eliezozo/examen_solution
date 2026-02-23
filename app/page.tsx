@@ -112,6 +112,19 @@ function formatDate(value: string) {
   }
 }
 
+function scrollToBottomSafe(target: Element | null) {
+  if (!target) return;
+  try {
+    target.scrollIntoView({ behavior: "smooth", block: "end" });
+  } catch {
+    try {
+      target.scrollIntoView(false);
+    } catch {
+      // No-op on very old browsers.
+    }
+  }
+}
+
 export default function ChatPage() {
   const [userId, setUserId] = useState("");
   const [fullName, setFullName] = useState("");
@@ -223,7 +236,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (!chatEndRef.current) return;
     if (!isNearBottom && !loading) return;
-    chatEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+    scrollToBottomSafe(chatEndRef.current);
   }, [chat, loading, isNearBottom]);
 
   useEffect(() => {
@@ -354,7 +367,9 @@ export default function ChatPage() {
   async function setImageFromFile(file: File) {
     const b64 = await toBase64(file);
     setImageBase64(b64);
-    setImagePreview(URL.createObjectURL(file));
+    const canCreateObjectUrl =
+      typeof URL !== "undefined" && typeof URL.createObjectURL === "function";
+    setImagePreview(canCreateObjectUrl ? URL.createObjectURL(file) : null);
   }
 
   async function onSend() {
@@ -432,7 +447,9 @@ export default function ChatPage() {
   }
 
   async function onComposerPaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
-    const items = Array.from(event.clipboardData.items);
+    const clipboardItems = event.clipboardData?.items;
+    if (!clipboardItems) return;
+    const items = Array.from(clipboardItems);
     const imageItem = items.find((item) => item.type.startsWith("image/"));
     if (!imageItem) return;
 
@@ -521,7 +538,11 @@ export default function ChatPage() {
   }
 
   function logout() {
-    window.localStorage.removeItem("rtogo_user_id");
+    try {
+      window.localStorage.removeItem("rtogo_user_id");
+    } catch {
+      // Ignore storage access errors.
+    }
     const nextId = getOrCreateUserId();
 
     setUserId(nextId);
