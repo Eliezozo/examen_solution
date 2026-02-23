@@ -1033,49 +1033,58 @@ export default function ChatPage() {
           )}
 
           <div className="flex items-end gap-2">
-            <label className="cursor-pointer rounded-lg bg-yellow-400 px-3 py-2 text-xs font-semibold text-slate-900">
-              Photo
-              <input type="file" accept="image/*" capture="environment" onChange={onImageChange} className="hidden" />
-            </label>
-            <label className="cursor-pointer rounded-lg bg-slate-200 px-3 py-2 text-xs font-semibold text-slate-900">
-              Fichier
-              <input
-                type="file"
-                accept=".pdf,.doc,.docx,.txt,.csv,.png,.jpg,.jpeg,.webp,.mp3,.wav,.m4a,.webm"
-                onChange={onFileAttachmentChange}
-                className="hidden"
+            <div className="relative flex-1">
+              <div className="absolute bottom-2 left-2 z-10 flex flex-col gap-1">
+                <label
+                  aria-label="Ajouter un fichier"
+                  className="cursor-pointer rounded-md bg-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-900 shadow-sm"
+                >
+                  Fichier
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt,.csv,.png,.jpg,.jpeg,.webp,.mp3,.wav,.m4a,.webm"
+                    onChange={onFileAttachmentChange}
+                    className="hidden"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={isRecordingAudio ? stopAudioRecording : startAudioRecording}
+                  className={`rounded-md px-2 py-1 text-[11px] font-semibold shadow-sm ${
+                    isRecordingAudio
+                      ? "bg-red-600 text-white"
+                      : isDarkTheme
+                      ? "bg-slate-700 text-white"
+                      : "bg-slate-800 text-white"
+                  }`}
+                >
+                  {isRecordingAudio ? "Stop vocal" : "Vocal"}
+                </button>
+              </div>
+
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                onKeyDown={onComposerKeyDown}
+                onPaste={onComposerPaste}
+                rows={2}
+                placeholder="Pose ta question ici."
+                className={`min-h-[56px] w-full resize-none rounded-xl border p-2 pl-24 pr-12 text-sm ${isDarkTheme ? "border-slate-600 bg-slate-900 text-white" : ""}`}
               />
-            </label>
-            <button
-              type="button"
-              onClick={isRecordingAudio ? stopAudioRecording : startAudioRecording}
-              className={`rounded-lg px-3 py-2 text-xs font-semibold ${
-                isRecordingAudio
-                  ? "bg-red-600 text-white"
-                  : isDarkTheme
-                  ? "bg-slate-700 text-white"
-                  : "bg-slate-800 text-white"
-              }`}
-            >
-              {isRecordingAudio ? "Stop vocal" : "Vocal"}
-            </button>
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyDown={onComposerKeyDown}
-              onPaste={onComposerPaste}
-              rows={2}
-              placeholder="Pose ta question ici."
-              className={`min-h-[44px] flex-1 resize-none rounded-xl border p-2 text-sm ${isDarkTheme ? "border-slate-600 bg-slate-900 text-white" : ""}`}
-            />
-            <button
-              onClick={onSend}
-              disabled={loading}
-              style={{ backgroundColor: "var(--accent)" }}
-              className="rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-            >
-              Envoyer
-            </button>
+
+              <button
+                type="button"
+                aria-label="Envoyer"
+                onClick={onSend}
+                disabled={loading}
+                style={{ backgroundColor: "var(--accent)" }}
+                className="absolute bottom-2 right-2 rounded-lg p-2 text-white disabled:opacity-60"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+                  <path d="M3 11.5L21 3l-5.5 18-3.8-7.2L3 11.5zm8.9.8l2.4 4.5 3.5-11.5-11.4 5.3 5.5 1.7z" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </div>
