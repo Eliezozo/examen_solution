@@ -86,3 +86,10 @@ npm run start
   - filtrer premium,
   - activer le premium (ajout en jours),
   - retirer le premium.
+
+## Debug iPhone
+- Ouvrir l'application avec `?debugIphone=1` (ex: `http://localhost:3000/?debugIphone=1`)
+- Un panneau "Debug iPhone" apparaît en bas à droite:
+  - trace des événements tactiles/clics,
+  - logs des actions critiques (menu, fichier, vocal, envoi),
+  - bouton `Copier logs` pour partager les traces de diagnostic.

@@ -59,6 +59,12 @@ type ChatAttachmentInput = {
   base64: string;
 };
 
+type DebugEntry = {
+  ts: string;
+  source: string;
+  detail: string;
+};
+
 const CLASSES = ["CM2", "3ème", "1ère", "Terminale"];
 const TOGO_PHONE_REGEX = /^\+228 [0-9]{8}$/;
 
@@ -187,6 +193,9 @@ export default function ChatPage() {
 
   const [showSidebar, setShowSidebar] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
+  const [debugIphoneMode, setDebugIphoneMode] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(true);
+  const [debugLogs, setDebugLogs] = useState<DebugEntry[]>([]);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const premiumPopupShownRef = useRef(false);
@@ -195,6 +204,7 @@ export default function ChatPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const debugSessionIdRef = useRef("");
 
   const theme = useMemo(
     () => THEME_OPTIONS.find((item) => item.id === themeColor) ?? THEME_OPTIONS[0],
@@ -222,8 +232,28 @@ export default function ChatPage() {
     [profileLoaded, phone]
   );
 
+  function addDebugLog(source: string, detail: string) {
+    if (!debugIphoneMode) return;
+    const entry: DebugEntry = {
+      ts: new Date().toISOString(),
+      source,
+      detail,
+    };
+    setDebugLogs((prev) => [...prev.slice(-149), entry]);
+  }
+
   useEffect(() => {
     setUserId(getOrCreateUserId());
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("debugIphone") !== "1") return;
+    setDebugIphoneMode(true);
+    debugSessionIdRef.current =
+      typeof crypto?.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `dbg-${Date.now().toString(36)}`;
   }, []);
 
   useEffect(() => {
@@ -281,6 +311,43 @@ export default function ChatPage() {
     const timer = window.setTimeout(() => setShowPremiumPopup(false), 5000);
     return () => window.clearTimeout(timer);
   }, [premiumActive]);
+
+  useEffect(() => {
+    if (!debugIphoneMode) return;
+
+    addDebugLog(
+      "session",
+      `start ua=${navigator.userAgent} viewport=${window.innerWidth}x${window.innerHeight}`
+    );
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      const label = target?.getAttribute("aria-label") || target?.id || target?.tagName || "unknown";
+      addDebugLog("pointerdown", `${label} x=${Math.round(event.clientX)} y=${Math.round(event.clientY)}`);
+    };
+
+    const onClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      const label = target?.getAttribute("aria-label") || target?.id || target?.tagName || "unknown";
+      addDebugLog("click", label);
+    };
+
+    const onTouchStart = (event: TouchEvent) => {
+      const target = event.target as HTMLElement | null;
+      const label = target?.getAttribute("aria-label") || target?.id || target?.tagName || "unknown";
+      addDebugLog("touchstart", label);
+    };
+
+    window.addEventListener("pointerdown", onPointerDown, { passive: true });
+    window.addEventListener("click", onClick, { passive: true });
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("click", onClick);
+      window.removeEventListener("touchstart", onTouchStart);
+    };
+  }, [debugIphoneMode]);
 
   useEffect(() => {
     return () => {
@@ -429,6 +496,7 @@ export default function ChatPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 8 * 1024 * 1024) {
+      addDebugLog("file", `reject-too-large name=${file.name} size=${file.size}`);
       setChat((prev) => [
         ...prev,
         { role: "assistant", text: "Fichier trop volumineux. Limite: 8 Mo." },
@@ -443,6 +511,7 @@ export default function ChatPage() {
       mimeType: file.type || "application/octet-stream",
       base64: b64,
     });
+    addDebugLog("file", `attached name=${file.name} type=${file.type || "unknown"}`);
     e.target.value = "";
   }
 
@@ -450,6 +519,7 @@ export default function ChatPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 8 * 1024 * 1024) {
+      addDebugLog("audio-file", `reject-too-large name=${file.name} size=${file.size}`);
       setChat((prev) => [
         ...prev,
         { role: "assistant", text: "Audio trop volumineux. Limite: 8 Mo." },
@@ -468,12 +538,15 @@ export default function ChatPage() {
       mimeType: file.type || "audio/mpeg",
       base64: b64,
     });
+    addDebugLog("audio-file", `attached name=${file.name} type=${file.type || "unknown"}`);
     e.target.value = "";
   }
 
   async function startAudioRecording() {
     if (isRecordingAudio) return;
+    addDebugLog("audio", "start-request");
     if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      addDebugLog("audio", "media-recorder-unsupported-fallback-file");
       audioInputRef.current?.click();
       return;
     }
@@ -519,17 +592,21 @@ export default function ChatPage() {
 
       recorder.start();
       setIsRecordingAudio(true);
+      addDebugLog("audio", "recording-started");
     } catch {
+      addDebugLog("audio", "mic-access-failed-fallback-file");
       audioInputRef.current?.click();
     }
   }
 
   function stopAudioRecording() {
     if (!mediaRecorderRef.current || !isRecordingAudio) return;
+    addDebugLog("audio", "recording-stop-request");
     mediaRecorderRef.current.stop();
   }
 
   async function onSend() {
+    addDebugLog("send", "send-request");
     const attachments: ChatAttachmentInput[] = [];
     if (fileAttachment) attachments.push(fileAttachment);
     if (audioAttachment) attachments.push(audioAttachment);
@@ -580,11 +657,13 @@ export default function ChatPage() {
       });
 
       const data = await res.json();
+      addDebugLog("send", `api-response status=${res.status}`);
 
       if (typeof data?.freeLeft === "number") setFreeLeft(data.freeLeft);
       if (data?.premiumUntil) setPremiumUntil(data.premiumUntil);
 
       if (res.status === 402 || data?.requiresPayment) {
+        addDebugLog("send", "requires-payment");
         setShowPayModal(true);
         return;
       }
@@ -602,6 +681,7 @@ export default function ChatPage() {
       }
       await loadHistory(userId);
     } catch (err: unknown) {
+      addDebugLog("send", "api-error");
       const errorMessage = err instanceof Error ? err.message : "Erreur inconnue";
       setChat((prev) => [...prev, { role: "assistant", text: `Erreur: ${errorMessage}` }]);
     } finally {
@@ -645,10 +725,12 @@ export default function ChatPage() {
   }
 
   function closeSidebarIfAllowed() {
+    addDebugLog("sidebar", `close-attempt mustComplete=${mustCompletePhoneProfile}`);
     if (!mustCompletePhoneProfile) setShowSidebar(false);
   }
 
   function openSidebar() {
+    addDebugLog("sidebar", "open");
     setShowSidebar(true);
   }
 
@@ -1134,6 +1216,69 @@ export default function ChatPage() {
           </div>
         </div>
       </div>
+
+      {debugIphoneMode && (
+        <div className="fixed bottom-2 right-2 z-[90] w-[min(94vw,24rem)] rounded-xl border bg-white/95 p-2 text-xs shadow-xl">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="font-semibold text-slate-800">Debug iPhone</p>
+            <button
+              type="button"
+              onPointerUp={() => setDebugOpen((prev) => !prev)}
+              className="rounded border px-2 py-0.5"
+            >
+              {debugOpen ? "Réduire" : "Ouvrir"}
+            </button>
+          </div>
+          {debugOpen && (
+            <>
+              <p className="mb-1 text-[11px] text-slate-600">
+                Session: {debugSessionIdRef.current || "n/a"} | Logs: {debugLogs.length}
+              </p>
+              <div className="mb-2 max-h-40 overflow-y-auto rounded border bg-slate-50 p-1">
+                {debugLogs.length === 0 && <p className="text-slate-500">Aucun log.</p>}
+                {debugLogs.map((entry, idx) => (
+                  <p key={`${entry.ts}-${idx}`} className="leading-4 text-slate-700">
+                    {entry.ts.slice(11, 19)} [{entry.source}] {entry.detail}
+                  </p>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  onPointerUp={async () => {
+                    const payload = JSON.stringify(
+                      {
+                        sessionId: debugSessionIdRef.current,
+                        userAgent: navigator.userAgent,
+                        viewport: `${window.innerWidth}x${window.innerHeight}`,
+                        logs: debugLogs,
+                      },
+                      null,
+                      2
+                    );
+                    try {
+                      await navigator.clipboard.writeText(payload);
+                      addDebugLog("debug", "copied-to-clipboard");
+                    } catch {
+                      addDebugLog("debug", "clipboard-copy-failed");
+                    }
+                  }}
+                  className="rounded border px-2 py-0.5"
+                >
+                  Copier logs
+                </button>
+                <button
+                  type="button"
+                  onPointerUp={() => setDebugLogs([])}
+                  className="rounded border px-2 py-0.5"
+                >
+                  Vider
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {showPayModal && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
