@@ -20,6 +20,9 @@ Contraintes:
 - Donner des exemples liés au contexte togolais quand pertinent.
 - Si image d'exercice floue, demander une photo plus nette avant de résoudre.
 - Ne jamais donner une réponse brute sans explication APC.
+- Si la demande est hors programme de la classe, dire clairement "hors niveau" et proposer une version adaptée.
+- Si la demande n'est pas scolaire (examen, exercice, notion de cours), refuser poliment et recentrer vers un exercice scolaire.
+- Ne jamais fournir un contenu universitaire/professionnel avancé à un élève CM2/3ème/1ère.
 `;
 
 type ChatRequest = {
@@ -40,6 +43,79 @@ type ChatRequest = {
 };
 
 const TOGO_PHONE_REGEX = /^\+228 [0-9]{8}$/;
+
+const PROGRAM_BY_CLASSE: Record<string, { domaines: string[]; matieres: string[] }> = {
+  CM2: {
+    domaines: ["Sciences et Technologies", "Communication", "Univers Social"],
+    matieres: ["Mathématiques", "Physique-Chimie", "SVT", "Français", "Anglais", "Histoire-Géographie", "ECM"],
+  },
+  "3ème": {
+    domaines: ["Sciences et Technologies", "Communication", "Univers Social"],
+    matieres: ["Mathématiques", "Physique-Chimie", "SVT", "Français", "Anglais", "Histoire-Géographie", "ECM"],
+  },
+  "1ère": {
+    domaines: ["Sciences et Technologies", "Communication", "Univers Social", "Développement Personnel"],
+    matieres: [
+      "Mathématiques",
+      "Physique-Chimie",
+      "SVT",
+      "Informatique",
+      "Français",
+      "Anglais",
+      "Espagnol",
+      "Allemand",
+      "Histoire-Géographie",
+      "ECM",
+      "Économie",
+      "Philosophie",
+    ],
+  },
+  Terminale: {
+    domaines: ["Sciences et Technologies", "Communication", "Univers Social", "Développement Personnel"],
+    matieres: [
+      "Mathématiques",
+      "Physique-Chimie",
+      "SVT",
+      "Informatique",
+      "Français",
+      "Anglais",
+      "Espagnol",
+      "Allemand",
+      "Histoire-Géographie",
+      "ECM",
+      "Économie",
+      "Philosophie",
+    ],
+  },
+};
+
+const NON_SCHOOL_PATTERNS = [
+  /\bcasino\b/i,
+  /\bpari\b/i,
+  /\bbet\b/i,
+  /\bcrypto\b/i,
+  /\btrading\b/i,
+  /\bhacker?\b/i,
+  /\bpirat(er|age)\b/i,
+  /\bséduction\b/i,
+  /\bamour\b/i,
+  /\bpolitique\b/i,
+  /\brecette\b/i,
+  /\bvoyage\b/i,
+  /\bblague\b/i,
+];
+
+const ADVANCED_KEYWORDS_BY_CLASSE: Record<string, string[]> = {
+  CM2: ["dérivée", "intégrale", "primitive", "limite", "équation différentielle", "matrice", "logarithme"],
+  "3ème": ["dérivée", "intégrale", "primitive", "limite", "équation différentielle", "matrice", "logarithme"],
+  "1ère": ["équation différentielle", "transformée de fourier", "laplacien", "tensoriel"],
+  Terminale: [],
+};
+
+function containsAnyKeyword(text: string, keywords: string[]) {
+  const normalized = text.toLowerCase();
+  return keywords.some((keyword) => normalized.includes(keyword.toLowerCase()));
+}
 
 export async function POST(req: Request) {
   try {
@@ -251,19 +327,78 @@ export async function POST(req: Request) {
       );
     }
 
+    const effectiveClasse = classe || profile?.classe || null;
+    const questionText = (message || "").trim();
+    const classeProgram = effectiveClasse ? PROGRAM_BY_CLASSE[effectiveClasse] : null;
+
+    const saveAndRespond = async (responseText: string) => {
+      const { error: historyError } = await supabase.from("history").insert({
+        user_id: userId,
+        message: message ?? "",
+        response: responseText,
+        image_url: null,
+      });
+
+      if (historyError) {
+        return NextResponse.json({ error: historyError.message }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        response: responseText,
+        freeLeft: premiumActive ? freeLeft : Math.max(0, freeLeft - 1),
+        premiumActive,
+        premiumUntil: resolvedPremiumUntil,
+        fullName: profile?.full_name ?? null,
+        phone: profile?.phone ?? null,
+        classe: profile?.classe ?? null,
+      });
+    };
+
+    if (!effectiveClasse || !classeProgram) {
+      return saveAndRespond(
+        "Analyse: je dois connaître ta classe avant de résoudre.\nRessources: renseigne ta classe (CM2, 3ème, 1ère ou Terminale).\nRésolution: ensuite, envoie ton exercice pour une aide adaptée."
+      );
+    }
+
+    const isNonSchoolRequest = questionText.length > 0 && NON_SCHOOL_PATTERNS.some((pattern) => pattern.test(questionText));
+    if (isNonSchoolRequest) {
+      return saveAndRespond(
+        `Analyse: ta demande ne concerne pas un exercice scolaire de ${effectiveClasse}.\nRessources: je suis dédié à la préparation d'examens.\nRésolution: envoie une question de cours, exercice ou épreuve de ${effectiveClasse}.`
+      );
+    }
+
+    if (domaine && !classeProgram.domaines.includes(domaine)) {
+      return saveAndRespond(
+        `Analyse: le domaine "${domaine}" n'est pas prévu pour la classe ${effectiveClasse}.\nRessources: domaines autorisés: ${classeProgram.domaines.join(", ")}.\nRésolution: choisis un domaine autorisé puis renvoie l'exercice.`
+      );
+    }
+
+    if (matiere && !classeProgram.matieres.includes(matiere)) {
+      return saveAndRespond(
+        `Analyse: la matière "${matiere}" est hors programme pour ${effectiveClasse}.\nRessources: matières autorisées: ${classeProgram.matieres.join(", ")}.\nRésolution: choisis une matière de ta classe et je t'aide pas à pas.`
+      );
+    }
+
+    const advancedKeywords = ADVANCED_KEYWORDS_BY_CLASSE[effectiveClasse] ?? [];
+    if (questionText.length > 0 && advancedKeywords.length > 0 && containsAnyKeyword(questionText, advancedKeywords)) {
+      return saveAndRespond(
+        `Analyse: ta question semble au-dessus du niveau ${effectiveClasse}.\nRessources: je dois respecter strictement ton programme.\nRésolution: reformule avec une notion de ${effectiveClasse}, je te guiderai étape par étape.`
+      );
+    }
+
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const brevityByClasse =
-      classe === "CM2" || classe === "3ème"
+      effectiveClasse === "CM2" || effectiveClasse === "3ème"
         ? `
-Règle de concision renforcée pour ${classe}:
+Règle de concision renforcée pour ${effectiveClasse}:
 - Réponse très directe et précise.
 - Maximum 70 mots.
 - Utiliser des phrases très courtes.
 - Garder APC en 3 mini-sections.
 - Éviter les détails théoriques inutiles.
 `
-        : classe === "Terminale"
+        : effectiveClasse === "Terminale"
         ? `
 Règle de concision pour Terminale:
 - Maximum 140 mots.
@@ -287,10 +422,13 @@ Règle de concision pour 1ère:
 
     const userContext = `
 Nom de l'élève: ${studentName || "Non précisé"}
-Classe: ${classe || "Non précisée"}
+Classe: ${effectiveClasse}
 Domaine: ${domaine || "Non précisé"}
 Matière: ${matiere || "Non précisée"}
 Question: ${message || (imageBase64 || normalizedAttachments.length > 0 ? "Voir pièces jointes envoyées" : "Non précisée")}
+Programme autorisé (${effectiveClasse}):
+- Domaines: ${classeProgram.domaines.join(", ")}
+- Matières: ${classeProgram.matieres.join(", ")}
 ${tutorPersona}
 ${studentName ? `Adresse-toi directement à ${studentName} dans la réponse.` : ""}
 ${brevityByClasse}
@@ -324,27 +462,7 @@ ${brevityByClasse}
     });
 
     const responseText = result.response.text() || "Je n'ai pas pu générer une réponse.";
-
-    const { error: historyError } = await supabase.from("history").insert({
-      user_id: userId,
-      message: message ?? "",
-      response: responseText,
-      image_url: null,
-    });
-
-    if (historyError) {
-      return NextResponse.json({ error: historyError.message }, { status: 500 });
-    }
-
-    return NextResponse.json({
-      response: responseText,
-      freeLeft: premiumActive ? freeLeft : Math.max(0, freeLeft - 1),
-      premiumActive,
-      premiumUntil: resolvedPremiumUntil,
-      fullName: profile?.full_name ?? null,
-      phone: profile?.phone ?? null,
-      classe: profile?.classe ?? null,
-    });
+    return saveAndRespond(responseText);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Erreur serveur.";
     return NextResponse.json({ error: message }, { status: 500 });
