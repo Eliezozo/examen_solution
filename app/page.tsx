@@ -184,6 +184,7 @@ export default function ChatPage() {
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const premiumPopupShownRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -1032,62 +1033,57 @@ export default function ChatPage() {
             </div>
           )}
 
-          <div className="flex items-end gap-2">
-            <div className="relative flex-1">
-              <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1">
-                <label
-                  aria-label="Ajouter un fichier"
-                  className="cursor-pointer rounded-md bg-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-900 shadow-sm"
-                >
-                  Fichier
-                  <input
-                    type="file"
-                    accept=".pdf,.doc,.docx,.txt,.csv,.png,.jpg,.jpeg,.webp,.mp3,.wav,.m4a,.webm"
-                    onChange={onFileAttachmentChange}
-                    className="hidden"
-                  />
-                </label>
-                <button
-                  type="button"
-                  aria-label={isRecordingAudio ? "Arrêter l'enregistrement vocal" : "Démarrer l'enregistrement vocal"}
-                  onClick={isRecordingAudio ? stopAudioRecording : startAudioRecording}
-                  className={`rounded-md p-1.5 shadow-sm ${
-                    isRecordingAudio
-                      ? "bg-red-600 text-white"
-                      : isDarkTheme
-                      ? "bg-slate-700 text-white"
-                      : "bg-slate-800 text-white"
-                  }`}
-                >
-                  <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
-                    <path d="M12 15a3 3 0 0 0 3-3V7a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5-3a1 1 0 1 1 2 0 7 7 0 0 1-6 6.93V21h2a1 1 0 1 1 0 2H9a1 1 0 1 1 0-2h2v-2.07A7 7 0 0 1 5 12a1 1 0 1 1 2 0 5 5 0 0 0 10 0z" />
-                  </svg>
-                </button>
-              </div>
-
-              <textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                onKeyDown={onComposerKeyDown}
-                onPaste={onComposerPaste}
-                rows={2}
-                placeholder="Pose ta question ici."
-                className={`min-h-[56px] w-full resize-none rounded-xl border p-2 pl-24 pr-12 text-sm ${isDarkTheme ? "border-slate-600 bg-slate-900 text-white" : ""}`}
-              />
-
-              <button
-                type="button"
-                aria-label="Envoyer"
-                onClick={onSend}
-                disabled={loading}
-                style={{ backgroundColor: "var(--accent)" }}
-                className="absolute bottom-2 right-2 rounded-lg p-2 text-white disabled:opacity-60"
-              >
-                <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
-                  <path d="M3 11.5L21 3l-5.5 18-3.8-7.2L3 11.5zm8.9.8l2.4 4.5 3.5-11.5-11.4 5.3 5.5 1.7z" />
-                </svg>
-              </button>
-            </div>
+          <div className="mx-auto flex w-full max-w-3xl items-center gap-2 rounded-2xl border px-2 py-1.5">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.txt,.csv,.png,.jpg,.jpeg,.webp,.mp3,.wav,.m4a,.webm"
+              onChange={onFileAttachmentChange}
+              className="hidden"
+            />
+            <button
+              type="button"
+              aria-label="Ajouter un fichier"
+              onClick={() => fileInputRef.current?.click()}
+              className={`p-2 ${isDarkTheme ? "text-slate-100" : "text-slate-700"} disabled:opacity-60`}
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
+                <path d="M7.5 6.5a4.5 4.5 0 0 1 9 0V14a6.5 6.5 0 0 1-13 0V7a1 1 0 1 1 2 0v7a4.5 4.5 0 0 0 9 0V6.5a2.5 2.5 0 0 0-5 0V14a.5.5 0 0 0 1 0V8a1 1 0 1 1 2 0v6a2.5 2.5 0 0 1-5 0V6.5z" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              aria-label={isRecordingAudio ? "Arrêter l'enregistrement vocal" : "Démarrer l'enregistrement vocal"}
+              onClick={isRecordingAudio ? stopAudioRecording : startAudioRecording}
+              className={`p-2 ${
+                isRecordingAudio ? "text-red-600" : isDarkTheme ? "text-slate-100" : "text-slate-700"
+              }`}
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
+                <path d="M12 15a3 3 0 0 0 3-3V7a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5-3a1 1 0 1 1 2 0 7 7 0 0 1-6 6.93V21h2a1 1 0 1 1 0 2H9a1 1 0 1 1 0-2h2v-2.07A7 7 0 0 1 5 12a1 1 0 1 1 2 0 5 5 0 0 0 10 0z" />
+              </svg>
+            </button>
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={onComposerKeyDown}
+              onPaste={onComposerPaste}
+              rows={1}
+              placeholder="Pose ta question ici."
+              className={`max-h-32 min-h-[40px] flex-1 resize-none bg-transparent p-1 text-sm outline-none ${isDarkTheme ? "text-white placeholder:text-slate-400" : "text-slate-900 placeholder:text-slate-500"}`}
+            />
+            <button
+              type="button"
+              aria-label="Envoyer"
+              onClick={onSend}
+              disabled={loading}
+              style={{ color: "var(--accent)" }}
+              className="p-2 disabled:opacity-60"
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
+                <path d="M3 11.5L21 3l-5.5 18-3.8-7.2L3 11.5zm8.9.8l2.4 4.5 3.5-11.5-11.4 5.3 5.5 1.7z" />
+              </svg>
+            </button>
           </div>
         </div>
       </div>
