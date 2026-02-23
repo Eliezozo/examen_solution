@@ -1034,7 +1034,7 @@ export default function ChatPage() {
 
           <div className="flex items-end gap-2">
             <div className="relative flex-1">
-              <div className="absolute bottom-2 left-2 z-10 flex flex-col gap-1">
+              <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1">
                 <label
                   aria-label="Ajouter un fichier"
                   className="cursor-pointer rounded-md bg-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-900 shadow-sm"
@@ -1049,8 +1049,9 @@ export default function ChatPage() {
                 </label>
                 <button
                   type="button"
+                  aria-label={isRecordingAudio ? "Arrêter l'enregistrement vocal" : "Démarrer l'enregistrement vocal"}
                   onClick={isRecordingAudio ? stopAudioRecording : startAudioRecording}
-                  className={`rounded-md px-2 py-1 text-[11px] font-semibold shadow-sm ${
+                  className={`rounded-md p-1.5 shadow-sm ${
                     isRecordingAudio
                       ? "bg-red-600 text-white"
                       : isDarkTheme
@@ -1058,7 +1059,9 @@ export default function ChatPage() {
                       : "bg-slate-800 text-white"
                   }`}
                 >
-                  {isRecordingAudio ? "Stop vocal" : "Vocal"}
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+                    <path d="M12 15a3 3 0 0 0 3-3V7a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5-3a1 1 0 1 1 2 0 7 7 0 0 1-6 6.93V21h2a1 1 0 1 1 0 2H9a1 1 0 1 1 0-2h2v-2.07A7 7 0 0 1 5 12a1 1 0 1 1 2 0 5 5 0 0 0 10 0z" />
+                  </svg>
                 </button>
               </div>
 
