@@ -4,6 +4,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+declare global {
+  interface Window {
+    MathJax?: {
+      typesetPromise?: (elements?: Element[]) => Promise<void>;
+      startup?: { promise?: Promise<void> };
+    };
+  }
+}
+
 type ChatItem = {
   role: "user" | "assistant";
   text: string;
@@ -362,6 +371,27 @@ export default function ChatPage() {
     const timer = window.setTimeout(() => setShowPremiumPopup(false), 5000);
     return () => window.clearTimeout(timer);
   }, [premiumActive]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.MathJax) return;
+    if (document.getElementById("mathjax-script")) return;
+
+    // Load MathJax once to render LaTeX formulas coming from AI responses.
+    const script = document.createElement("script");
+    script.id = "mathjax-script";
+    script.async = true;
+    script.src = "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js";
+    document.head.appendChild(script);
+  }, []);
+
+  useEffect(() => {
+    if (!chatScrollRef.current) return;
+    if (!window.MathJax?.typesetPromise) return;
+    window.MathJax.typesetPromise([chatScrollRef.current]).catch(() => {
+      // Ignore MathJax render errors to avoid blocking chat.
+    });
+  }, [chat, loading]);
 
   useEffect(() => {
     if (!debugIphoneMode) return;

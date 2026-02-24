@@ -32,7 +32,7 @@ Exigences de résolution d'exercice:
 - Ne jamais inventer une valeur numérique (ex: alpha, maximum, racine) sans montrer d'où elle vient.
 - Ne jamais produire une "vérification finale" en Oui/Non sans justification mathématique.
 - Si les données nécessaires manquent (fonction absente, intervalle absent, figure illisible), arrêter la résolution et demander les infos manquantes.
-- Ne jamais utiliser de notation LaTeX (pas de $...$, \alpha, \infty, etc.). Utiliser uniquement du texte simple lisible.
+- Pour les formules mathématiques, utiliser la notation LaTeX simple entre $...$ (inline) ou $$...$$ (bloc).
 `;
 
 type ChatRequest = {
@@ -142,23 +142,6 @@ function formatRecentHistory(
 
 function hasLikelyMathExpression(input: string) {
   return /[=]|f\(|x\^|x²|sqrt|racine|ln|log|sin|cos|tan|\/|\*/i.test(input);
-}
-
-function sanitizeMathText(raw: string) {
-  return raw
-    .replace(/\$+/g, "")
-    .replace(/\\alpha/gi, "alpha")
-    .replace(/\\beta/gi, "beta")
-    .replace(/\\gamma/gi, "gamma")
-    .replace(/\\infty/gi, "infini")
-    .replace(/\\approx/gi, "≈")
-    .replace(/\\times/gi, "x")
-    .replace(/\\cdot/gi, ".")
-    .replace(/\\to/gi, "->")
-    .replace(/\\left|\\right/gi, "")
-    .replace(/\(\s*\\?([a-zA-Z]+)\s*,/g, "($1,")
-    .replace(/\s{2,}/g, " ")
-    .trim();
 }
 
 export async function POST(req: Request) {
@@ -537,9 +520,7 @@ Format de sortie obligatoire:
       contents: [{ role: "user", parts }],
     });
 
-    const responseText = sanitizeMathText(
-      result.response.text() || "Je n'ai pas pu générer une réponse."
-    );
+    const responseText = result.response.text() || "Je n'ai pas pu générer une réponse.";
     return saveAndRespond(responseText);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Erreur serveur.";
