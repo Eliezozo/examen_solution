@@ -11,9 +11,7 @@ Tu dois répondre STRICTEMENT selon la démarche APC en 3 sections obligatoires:
 
 Contraintes:
 - Langue: français simple et pédagogique.
-- Réponse courte: maximum 120 mots.
-- Phrases courtes et faciles (niveau élève).
-- Aller directement à l'essentiel, sans longs paragraphes.
+- Réponse complète et structurée, pas télégraphique.
 - Adapter le niveau à la classe indiquée.
 - Appeler l'élève par son vrai nom si disponible.
 - Encourager l'autonomie de l'élève.
@@ -23,6 +21,14 @@ Contraintes:
 - Si la demande est hors programme de la classe, dire clairement "hors niveau" et proposer une version adaptée.
 - Si la demande n'est pas scolaire (examen, exercice, notion de cours), refuser poliment et recentrer vers un exercice scolaire.
 - Ne jamais fournir un contenu universitaire/professionnel avancé à un élève CM2/3ème/1ère.
+
+Exigences de résolution d'exercice:
+- Toujours identifier les données connues et ce qu'on cherche.
+- Citer la formule/règle utilisée.
+- Montrer les calculs ou étapes intermédiaires (pas sauter directement au résultat).
+- Donner une réponse finale explicite et vérifiée.
+- Si la nouvelle question dépend d'une question précédente, réutiliser le contexte récent avant de répondre.
+- Si une information manque, poser une question courte de clarification.
 `;
 
 type ChatRequest = {
@@ -115,6 +121,19 @@ const ADVANCED_KEYWORDS_BY_CLASSE: Record<string, string[]> = {
 function containsAnyKeyword(text: string, keywords: string[]) {
   const normalized = text.toLowerCase();
   return keywords.some((keyword) => normalized.includes(keyword.toLowerCase()));
+}
+
+function formatRecentHistory(
+  rows: Array<{ message: string | null; response: string | null }>
+) {
+  if (!rows.length) return "Aucun contexte récent.";
+  return rows
+    .map((row, idx) => {
+      const question = (row.message || "").trim() || "(question vide)";
+      const answer = (row.response || "").trim() || "(réponse vide)";
+      return `Échange ${idx + 1}\n- Élève: ${question}\n- IA: ${answer}`;
+    })
+    .join("\n\n");
 }
 
 export async function POST(req: Request) {
@@ -386,29 +405,41 @@ export async function POST(req: Request) {
       );
     }
 
+    const { data: recentHistory, error: historyReadError } = await supabase
+      .from("history")
+      .select("message, response")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(6);
+
+    if (historyReadError) {
+      return NextResponse.json({ error: historyReadError.message }, { status: 500 });
+    }
+
+    const recentHistoryContext = formatRecentHistory((recentHistory ?? []).reverse());
+
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const brevityByClasse =
       effectiveClasse === "CM2" || effectiveClasse === "3ème"
         ? `
-Règle de concision renforcée pour ${effectiveClasse}:
-- Réponse très directe et précise.
-- Maximum 70 mots.
-- Utiliser des phrases très courtes.
-- Garder APC en 3 mini-sections.
-- Éviter les détails théoriques inutiles.
+Règles de détail pour ${effectiveClasse}:
+- Réponse claire en 3 sections APC.
+- Entre 90 et 160 mots.
+- Montrer les étapes essentielles de calcul.
 `
         : effectiveClasse === "Terminale"
         ? `
-Règle de concision pour Terminale:
-- Maximum 140 mots.
-- APC clair, avec justification rapide des étapes.
-- Mettre l'accent sur méthode + vérification finale.
+Règles de détail pour Terminale:
+- Réponse en 3 sections APC.
+- Entre 180 et 280 mots.
+- Détailler raisonnement, calculs intermédiaires et vérification.
 `
         : `
-Règle de concision pour 1ère:
-- Maximum 120 mots.
-- APC clair et synthétique.
+Règles de détail pour 1ère:
+- Réponse en 3 sections APC.
+- Entre 140 et 220 mots.
+- Détailler les étapes de résolution sans raccourci.
 `;
 
     const tutorPersona =
@@ -429,6 +460,8 @@ Question: ${message || (imageBase64 || normalizedAttachments.length > 0 ? "Voir 
 Programme autorisé (${effectiveClasse}):
 - Domaines: ${classeProgram.domaines.join(", ")}
 - Matières: ${classeProgram.matieres.join(", ")}
+Contexte récent de la conversation (à utiliser pour garder la logique):
+${recentHistoryContext}
 ${tutorPersona}
 ${studentName ? `Adresse-toi directement à ${studentName} dans la réponse.` : ""}
 ${brevityByClasse}
