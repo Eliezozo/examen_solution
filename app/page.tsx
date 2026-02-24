@@ -144,6 +144,28 @@ function scrollToBottomSafe(target: Element | null) {
   }
 }
 
+function isAppleMobile(ua: string) {
+  return /iPhone|iPod|iPad/i.test(ua);
+}
+
+function getQueryParam(name: string) {
+  if (typeof window === "undefined") return null;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get(name);
+  } catch {
+    const query = window.location.search.replace(/^\?/, "");
+    const pairs = query.split("&");
+    for (const part of pairs) {
+      const [rawKey, rawValue] = part.split("=");
+      if (decodeURIComponent(rawKey || "") === name) {
+        return decodeURIComponent(rawValue || "");
+      }
+    }
+    return null;
+  }
+}
+
 export default function ChatPage() {
   const [userId, setUserId] = useState("");
   const [profileLoaded, setProfileLoaded] = useState(false);
@@ -196,6 +218,7 @@ export default function ChatPage() {
   const [debugIphoneMode, setDebugIphoneMode] = useState(false);
   const [debugOpen, setDebugOpen] = useState(true);
   const [debugLogs, setDebugLogs] = useState<DebugEntry[]>([]);
+  const [isAppleDevice, setIsAppleDevice] = useState(false);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const premiumPopupShownRef = useRef(false);
@@ -247,8 +270,31 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("debugIphone") !== "1") return;
+    if (typeof navigator !== "undefined") {
+      setIsAppleDevice(isAppleMobile(navigator.userAgent));
+    }
+  }, []);
+
+  useEffect(() => {
+    const queryFlag = getQueryParam("debugIphone") === "1" || getQueryParam("debug") === "iphone";
+    const hashFlag = (window.location.hash || "").toLowerCase().includes("debugiphone");
+    const storedFlag = (() => {
+      try {
+        return window.localStorage.getItem("rtogo_debug_iphone") === "1";
+      } catch {
+        return false;
+      }
+    })();
+
+    const shouldEnable = queryFlag || hashFlag || storedFlag;
+    if (!shouldEnable) return;
+
+    try {
+      window.localStorage.setItem("rtogo_debug_iphone", "1");
+    } catch {
+      // Ignore storage failures.
+    }
+
     setDebugIphoneMode(true);
     debugSessionIdRef.current =
       typeof crypto?.randomUUID === "function"
@@ -1278,6 +1324,28 @@ export default function ChatPage() {
             </>
           )}
         </div>
+      )}
+
+      {!debugIphoneMode && isAppleDevice && (
+        <button
+          type="button"
+          onPointerUp={() => {
+            try {
+              window.localStorage.setItem("rtogo_debug_iphone", "1");
+            } catch {
+              // Ignore storage failures.
+            }
+            setDebugIphoneMode(true);
+            debugSessionIdRef.current =
+              typeof crypto?.randomUUID === "function"
+                ? crypto.randomUUID()
+                : `dbg-${Date.now().toString(36)}`;
+            addDebugLog("session", "enabled-manually");
+          }}
+          className="fixed bottom-2 right-2 z-[89] rounded-lg border bg-white/95 px-2 py-1 text-xs text-slate-700 shadow md:hidden"
+        >
+          Debug
+        </button>
       )}
 
       {showPayModal && (

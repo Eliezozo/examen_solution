@@ -89,6 +89,7 @@ npm run start
 
 ## Debug iPhone
 - Ouvrir l'application avec `?debugIphone=1` (ex: `http://localhost:3000/?debugIphone=1`)
+- Alternative ancienne version iOS: `/#debugIphone` ou cliquer le bouton `Debug` (en bas à droite sur iPhone/iPad)
 - Un panneau "Debug iPhone" apparaît en bas à droite:
   - trace des événements tactiles/clics,
   - logs des actions critiques (menu, fichier, vocal, envoi),
