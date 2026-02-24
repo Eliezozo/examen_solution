@@ -29,6 +29,10 @@ Exigences de résolution d'exercice:
 - Donner une réponse finale explicite et vérifiée.
 - Si la nouvelle question dépend d'une question précédente, réutiliser le contexte récent avant de répondre.
 - Si une information manque, poser une question courte de clarification.
+- Ne jamais inventer une valeur numérique (ex: alpha, maximum, racine) sans montrer d'où elle vient.
+- Ne jamais produire une "vérification finale" en Oui/Non sans justification mathématique.
+- Si les données nécessaires manquent (fonction absente, intervalle absent, figure illisible), arrêter la résolution et demander les infos manquantes.
+- Ne jamais utiliser de notation LaTeX (pas de $...$, \alpha, \infty, etc.). Utiliser uniquement du texte simple lisible.
 `;
 
 type ChatRequest = {
@@ -134,6 +138,27 @@ function formatRecentHistory(
       return `Échange ${idx + 1}\n- Élève: ${question}\n- IA: ${answer}`;
     })
     .join("\n\n");
+}
+
+function hasLikelyMathExpression(input: string) {
+  return /[=]|f\(|x\^|x²|sqrt|racine|ln|log|sin|cos|tan|\/|\*/i.test(input);
+}
+
+function sanitizeMathText(raw: string) {
+  return raw
+    .replace(/\$+/g, "")
+    .replace(/\\alpha/gi, "alpha")
+    .replace(/\\beta/gi, "beta")
+    .replace(/\\gamma/gi, "gamma")
+    .replace(/\\infty/gi, "infini")
+    .replace(/\\approx/gi, "≈")
+    .replace(/\\times/gi, "x")
+    .replace(/\\cdot/gi, ".")
+    .replace(/\\to/gi, "->")
+    .replace(/\\left|\\right/gi, "")
+    .replace(/\(\s*\\?([a-zA-Z]+)\s*,/g, "($1,")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 export async function POST(req: Request) {
@@ -386,6 +411,13 @@ export async function POST(req: Request) {
       );
     }
 
+    const hasMathLikeSignal = hasLikelyMathExpression(questionText);
+    if (!hasMathLikeSignal && !imageBase64 && normalizedAttachments.length === 0) {
+      return saveAndRespond(
+        "Analyse: l'énoncé semble incomplet pour une résolution exacte.\nRessources: il me faut la fonction/équation ou les données chiffrées.\nRésolution: envoie l'énoncé complet (ex: f(x)=..., intervalle, question précise) et je détaille chaque étape."
+      );
+    }
+
     if (domaine && !classeProgram.domaines.includes(domaine)) {
       return saveAndRespond(
         `Analyse: le domaine "${domaine}" n'est pas prévu pour la classe ${effectiveClasse}.\nRessources: domaines autorisés: ${classeProgram.domaines.join(", ")}.\nRésolution: choisis un domaine autorisé puis renvoie l'exercice.`
@@ -465,6 +497,17 @@ ${recentHistoryContext}
 ${tutorPersona}
 ${studentName ? `Adresse-toi directement à ${studentName} dans la réponse.` : ""}
 ${brevityByClasse}
+
+Format de sortie obligatoire:
+1) Analyse de la situation-problème
+- Données connues:
+- Ce qu'on cherche:
+2) Mobilisation des ressources
+- Formules/règles utilisées:
+3) Résolution pas à pas + vérification finale
+- Étapes de calcul numérotées:
+- Résultat final:
+- Vérification justifiée (pas Oui/Non brut):
 `;
 
     const parts: Array<{ text: string } | { inlineData: { data: string; mimeType: string } }> = [
@@ -494,7 +537,9 @@ ${brevityByClasse}
       contents: [{ role: "user", parts }],
     });
 
-    const responseText = result.response.text() || "Je n'ai pas pu générer une réponse.";
+    const responseText = sanitizeMathText(
+      result.response.text() || "Je n'ai pas pu générer une réponse."
+    );
     return saveAndRespond(responseText);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Erreur serveur.";
