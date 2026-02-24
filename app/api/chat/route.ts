@@ -140,10 +140,6 @@ function formatRecentHistory(
     .join("\n\n");
 }
 
-function hasLikelyMathExpression(input: string) {
-  return /[=]|f\(|x\^|x²|sqrt|racine|ln|log|sin|cos|tan|\/|\*/i.test(input);
-}
-
 export async function POST(req: Request) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -394,13 +390,6 @@ export async function POST(req: Request) {
       );
     }
 
-    const hasMathLikeSignal = hasLikelyMathExpression(questionText);
-    if (!hasMathLikeSignal && !imageBase64 && normalizedAttachments.length === 0) {
-      return saveAndRespond(
-        "Analyse: l'énoncé semble incomplet pour une résolution exacte.\nRessources: il me faut la fonction/équation ou les données chiffrées.\nRésolution: envoie l'énoncé complet (ex: f(x)=..., intervalle, question précise) et je détaille chaque étape."
-      );
-    }
-
     if (domaine && !classeProgram.domaines.includes(domaine)) {
       return saveAndRespond(
         `Analyse: le domaine "${domaine}" n'est pas prévu pour la classe ${effectiveClasse}.\nRessources: domaines autorisés: ${classeProgram.domaines.join(", ")}.\nRésolution: choisis un domaine autorisé puis renvoie l'exercice.`
@@ -432,6 +421,22 @@ export async function POST(req: Request) {
     }
 
     const recentHistoryContext = formatRecentHistory((recentHistory ?? []).reverse());
+
+    const isMathQuestion =
+      matiere === "Mathématiques" ||
+      /\bmath|équation|fonction|dérivée|intégrale|limite|racine|théorème|triangle|droite|vecteur|matrice|pourcentage|fraction\b/i.test(
+        questionText
+      );
+
+    const mathFormattingInstructions = isMathQuestion
+      ? `
+Format mathématique obligatoire (uniquement pour une question de maths):
+- Utiliser du LaTeX lisible: inline avec $...$, bloc avec $$...$$.
+- Écrire les formules proprement (ex: $f(x)$, $x^2$, $\\frac{a}{b}$, $\\sqrt{x}$).
+- Aligner les étapes de calcul en blocs courts, pas en phrase longue.
+- Conclure avec un résultat final clair, encadré textuellement.
+`
+      : "";
 
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
@@ -480,6 +485,7 @@ ${recentHistoryContext}
 ${tutorPersona}
 ${studentName ? `Adresse-toi directement à ${studentName} dans la réponse.` : ""}
 ${brevityByClasse}
+${mathFormattingInstructions}
 
 Format de sortie obligatoire:
 1) Analyse de la situation-problème
